@@ -1,3 +1,6 @@
+#![feature(test)]
+extern crate test;
+
 use ordered_float::NotNan;
 use rand::{
     self,
@@ -22,7 +25,6 @@ pub enum Difficulty {
     Beginner,
     Intermediate,
     Expert,
-    Custom(usize, usize, usize),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -176,13 +178,13 @@ impl Minesweeper {
     }
 
     #[rustfmt::skip]
-    pub fn from_difficulty(diff: Difficulty) -> Result<Self, MinesweeperError> {
-        match diff {
+    pub fn from_difficulty(diff: Difficulty) -> Self {
+        let result = match diff {
             Difficulty::Beginner     => Self::new( 9,  9, 10),
             Difficulty::Intermediate => Self::new(16, 16, 40),
             Difficulty::Expert       => Self::new(30, 16, 99),
-            Difficulty::Custom(width, length, mines) => Self::new(width, length, mines)
-        }
+        };
+        result.unwrap()
     }
 
     pub fn reveal(&mut self, idx: usize) -> Result<(), MinesweeperError> {
@@ -207,7 +209,7 @@ impl Minesweeper {
     }
 
     // 1.0f64 is exact
-    pub fn solve(&mut self) -> Result<(usize, NotNan<f64>), MinesweeperError> {
+    pub fn solve_next(&mut self) -> Result<(usize, NotNan<f64>), MinesweeperError> {
         let n = self.board.len();
         let center = self.from_rc(self.width / 2, self.length / 2);
         if self.board[center].status != Status::Visible {
@@ -275,11 +277,19 @@ impl Minesweeper {
             })
             .ok_or(MinesweeperError::IsAlreadySolved)
     }
+
+    pub fn solve(&mut self) -> Result<(), MinesweeperError> {
+        while let Ok((idx, _)) = self.solve_next() {
+            self.reveal(idx)?;
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{Status::*, *};
+    use test::Bencher;
 
     fn get_inst() -> Minesweeper {
         Minesweeper {
@@ -636,9 +646,7 @@ Flagged: 0 / 10
     #[test]
     fn test_solve() {
         let mut inst = get_inst();
-        while let Ok((idx, _)) = inst.solve() {
-            inst.reveal(idx).unwrap();
-        }
+        inst.solve().unwrap();
         assert_eq!(
             inst.to_string(),
             "\
@@ -655,5 +663,21 @@ Flagged: 10 / 10
 0. 1. 🚩 1. 0. 0. 0. 0. 0. 
 "
         )
+    }
+
+    #[bench]
+    #[should_panic]
+    fn bench_random_beginner(b: &mut Bencher) {
+        let mut solved = 0;
+        let mut n = 0;
+        b.iter(|| {
+            let mut inst = Minesweeper::from_difficulty(Difficulty::Beginner);
+            if inst.solve().is_ok() {
+                solved += 1;
+            }
+            n += 1;
+        });
+        // cargo +nightly bench -- --nocapture
+        println!("{:.3} ({} / {})", (solved as f64) / (n as f64), solved, n);
     }
 }
