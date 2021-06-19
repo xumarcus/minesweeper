@@ -1,3 +1,4 @@
+use ordered_float::NotNan;
 use rand::{
     self,
     distributions::{Distribution, Uniform},
@@ -51,14 +52,14 @@ impl fmt::Display for Cell {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.count {
             Some(x) => match self.status {
-                Status::Flagged => write!(f, "?!")?, // Wrong flag
+                Status::Flagged => unreachable!(), // Wrong flag
                 Status::ToSolve => write!(f, "{}!", x)?,
                 Status::Unknown => write!(f, "❔")?,
                 Status::Visible => write!(f, "{}.", x)?,
             },
             None => match self.status {
                 Status::Flagged => write!(f, "🚩")?,
-                Status::ToSolve => write!(f, "??")?, // Wrong sol
+                Status::ToSolve => unreachable!(), // Wrong sol
                 Status::Unknown => write!(f, "💣")?,
                 Status::Visible => unreachable!(), // Bombs not visible
             },
@@ -104,9 +105,8 @@ impl fmt::Display for Minesweeper {
 
 impl Minesweeper {
     fn square(&self, idx: usize) -> impl Iterator<Item = usize> {
-        let len = self.length;
-        let row = idx / len;
-        let col = idx % len;
+        let (row, col) = self.as_rc(idx);
+        let len = self.length; // Copy length from self
         (max(1, row) - 1..=min(self.width - 1, row + 1))
             .flat_map(move |r| (max(1, col) - 1..=min(len - 1, col + 1)).map(move |c| r * len + c))
     }
@@ -124,7 +124,17 @@ impl Minesweeper {
             .count()
     }
 
-    fn mines(&self) -> usize {
+    #[inline]
+    pub fn as_rc(&self, idx: usize) -> (usize, usize) {
+        (idx / self.length, idx % self.length)
+    }
+
+    #[inline]
+    pub fn from_rc(&self, row: usize, col: usize) -> usize {
+        row * self.length + col
+    }
+
+    pub fn mines(&self) -> usize {
         self.board
             .iter()
             .filter(|cell| cell.count.is_none())
@@ -145,7 +155,12 @@ impl Minesweeper {
         let l_gen = Uniform::from(0..length);
         for _ in 0..mines {
             loop {
-                let idx = w_gen.sample(&mut rng) * length + l_gen.sample(&mut rng);
+                let row = w_gen.sample(&mut rng);
+                let col = l_gen.sample(&mut rng);
+                if row == width / 2 && col == length / 2 {
+                    continue; // keep center revealable
+                }
+                let idx = inst.from_rc(row, col);
                 if inst.board[idx].count.is_some() {
                     inst.board[idx].count = None;
                     for cidx in inst.square(idx) {
@@ -192,21 +207,25 @@ impl Minesweeper {
     }
 
     // 1.0f64 is exact
-    pub fn solve(&mut self) -> Result<(usize, f64), MinesweeperError> {
+    pub fn solve(&mut self) -> Result<(usize, NotNan<f64>), MinesweeperError> {
+        let n = self.board.len();
+        let center = self.from_rc(self.width / 2, self.length / 2);
+        if self.board[center].status != Status::Visible {
+            return Ok((center, NotNan::new(1.0).unwrap()));
+        }
         loop {
-            let n = self.board.len();
             let mut to_solve: Vec<Option<bool>> = vec![None; n];
             for (idx, cell) in self.board.iter().enumerate() {
                 if let Some(count) = cell.get() {
                     let unknowns = self.count_status_square(idx, Status::Unknown);
                     let flags = self.count_status_square(idx, Status::Flagged);
-                    if unknowns == count - flags {
+                    if count == flags {
                         for cidx in self.square(idx) {
                             if self.board[cidx].status == Status::Unknown {
                                 to_solve[cidx] = Some(true);
                             }
                         }
-                    } else if unknowns == count {
+                    } else if count == unknowns + flags {
                         for cidx in self.square(idx) {
                             if self.board[cidx].status == Status::Unknown {
                                 to_solve[cidx] = Some(false);
@@ -226,19 +245,415 @@ impl Minesweeper {
                 }
             }
         }
+        let unflagged = self.mines() - self.count_status(Status::Flagged);
+        let unknowns = self.count_status(Status::Unknown);
         self.board
             .iter()
             .enumerate()
             .find(|(_, cell)| cell.status == Status::ToSolve)
-            .map(|(idx, _)| (idx, 1.0))
+            .map(|(idx, _)| (idx, NotNan::new(1.0).unwrap()))
             .or_else(|| {
-                let p = (self.mines() as f64) / (self.count_status(Status::Unknown) as f64);
+                let base_prob = NotNan::new((unflagged as f64) / (unknowns as f64)).ok()?;
+                let mut prob = vec![None; n];
+                for (idx, cell) in self.board.iter().enumerate() {
+                    if let Some(count) = cell.get() {
+                        let cell_p = NotNan::new(
+                            (count as f64)
+                                / (self.count_status_square(idx, Status::Unknown) as f64),
+                        );
+                        for idx_sq in self.square(idx) {
+                            prob[idx_sq] = max(prob[idx_sq], cell_p.ok());
+                        }
+                    }
+                }
                 self.board
                     .iter()
                     .enumerate()
-                    .find(|(_, cell)| cell.status == Status::Unknown)
-                    .map(|(idx, _)| (idx, p))
+                    .filter(|(_, cell)| cell.status == Status::Unknown)
+                    .map(|(idx, _)| (idx, prob[idx].unwrap_or(base_prob)))
+                    .min_by_key(|(_, p)| *p)
             })
             .ok_or(MinesweeperError::IsAlreadySolved)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Status::*, *};
+
+    fn get_inst() -> Minesweeper {
+        Minesweeper {
+        board: vec![
+            Cell {
+                count: None,
+                status: Unknown,
+            },
+            Cell {
+                count: Some(2),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(1),
+                status: Unknown,
+            },
+            Cell {
+                count: None,
+                status: Unknown,
+            },
+            Cell {
+                count: Some(1),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(0),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(0),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(0),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(0),
+                status: Unknown,
+            },
+            Cell {
+                count: None,
+                status: Unknown,
+            },
+            Cell {
+                count: Some(3),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(1),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(1),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(1),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(1),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(1),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(1),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(0),
+                status: Unknown,
+            },
+            Cell {
+                count: None,
+                status: Unknown,
+            },
+            Cell {
+                count: Some(2),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(0),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(0),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(0),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(1),
+                status: Unknown,
+            },
+            Cell {
+                count: None,
+                status: Unknown,
+            },
+            Cell {
+                count: Some(2),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(1),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(1),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(1),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(0),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(0),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(0),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(1),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(3),
+                status: Unknown,
+            },
+            Cell {
+                count: None,
+                status: Unknown,
+            },
+            Cell {
+                count: Some(2),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(0),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(0),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(0),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(0),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(0),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(1),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(3),
+                status: Unknown,
+            },
+            Cell {
+                count: None,
+                status: Unknown,
+            },
+            Cell {
+                count: Some(3),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(0),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(0),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(0),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(0),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(0),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(1),
+                status: Unknown,
+            },
+            Cell {
+                count: None,
+                status: Unknown,
+            },
+            Cell {
+                count: Some(3),
+                status: Unknown,
+            },
+            Cell {
+                count: None,
+                status: Unknown,
+            },
+            Cell {
+                count: Some(0),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(0),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(0),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(0),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(0),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(1),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(1),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(2),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(1),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(0),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(1),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(1),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(1),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(0),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(0),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(0),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(0),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(0),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(0),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(1),
+                status: Unknown,
+            },
+            Cell {
+                count: None,
+                status: Unknown,
+            },
+            Cell {
+                count: Some(1),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(0),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(0),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(0),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(0),
+                status: Unknown,
+            },
+            Cell {
+                count: Some(0),
+                status: Unknown,
+            },
+        ],
+        width: 9,
+        length: 9,
+    }}
+
+    #[test]
+    fn test_display() {
+        assert_eq!(
+            get_inst().to_string(),
+            "\
+Dimensions: 9 x 9
+Flagged: 0 / 10
+💣 ❔ ❔ 💣 ❔ ❔ ❔ ❔ ❔ 
+💣 ❔ ❔ ❔ ❔ ❔ ❔ ❔ ❔ 
+💣 ❔ ❔ ❔ ❔ ❔ 💣 ❔ ❔ 
+❔ ❔ ❔ ❔ ❔ ❔ ❔ 💣 ❔ 
+❔ ❔ ❔ ❔ ❔ ❔ ❔ 💣 ❔ 
+❔ ❔ ❔ ❔ ❔ ❔ 💣 ❔ 💣 
+❔ ❔ ❔ ❔ ❔ ❔ ❔ ❔ ❔ 
+❔ ❔ ❔ ❔ ❔ ❔ ❔ ❔ ❔ 
+❔ ❔ 💣 ❔ ❔ ❔ ❔ ❔ ❔ 
+"
+        );
+    }
+
+    #[test]
+    fn test_solve() {
+        let mut inst = get_inst();
+        while let Ok((idx, _)) = inst.solve() {
+            inst.reveal(idx).unwrap();
+        }
+        assert_eq!(
+            inst.to_string(),
+            "\
+Dimensions: 9 x 9
+Flagged: 10 / 10
+🚩 2. 1. 🚩 1. 0. 0. 0. 0. 
+🚩 3. 1. 1. 1. 1. 1. 1. 0. 
+🚩 2. 0. 0. 0. 1. 🚩 2. 1. 
+1. 1. 0. 0. 0. 1. 3. 🚩 2. 
+0. 0. 0. 0. 0. 1. 3. 🚩 3. 
+0. 0. 0. 0. 0. 1. 🚩 3. 🚩 
+0. 0. 0. 0. 0. 1. 1. 2. 1. 
+0. 1. 1. 1. 0. 0. 0. 0. 0. 
+0. 1. 🚩 1. 0. 0. 0. 0. 0. 
+"
+        )
     }
 }
