@@ -136,6 +136,3 @@ impl Minesweeper for MockMinesweeper {
         Ok(())
     }
 }
-
-// Make this solvable
-impl SolveMinesweeper for MockMinesweeper {}

@@ -47,16 +47,15 @@ fn new_board(board: &Vec<Status>, config: Config) -> Vec<Status> {
     new_board
 }
 
-pub trait Minesweeper {
+pub trait Minesweeper: fmt::Display {
     // These getters/setters needed for abstraction
     fn get_config(&self) -> Config;
     fn get_board(&self) -> &Vec<Status>;
     fn set_board(&mut self, board: Vec<Status>) -> MsResult<()>;
 
+    // Depends on implementation
     fn reveal(&mut self, idx: usize) -> MsResult<()>;
-}
 
-pub trait SolveMinesweeper: Minesweeper + fmt::Display {
     // TODO use logger
     fn solve(&mut self) -> MsResult<()> {
         println!("{}", self);
