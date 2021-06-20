@@ -1,4 +1,4 @@
-// Copyright (C) 2021 xumar
+// Copyright (C) 2021 Marcus Xu
 //
 // This file is part of minesweeper.
 //
