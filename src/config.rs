@@ -1,23 +1,23 @@
 // Copyright (C) 2021 xumar
-// 
+//
 // This file is part of minesweeper.
-// 
+//
 // minesweeper is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
-// 
+//
 // minesweeper is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU General Public License
 // along with minesweeper.  If not, see <http://www.gnu.org/licenses/>.
 
 use super::*;
 
-use std::cmp::{min, max};
+use std::cmp::{max, min};
 
 #[derive(Clone, Copy, Debug)]
 pub struct Config {
@@ -29,7 +29,11 @@ pub struct Config {
 impl Config {
     pub fn new(width: usize, length: usize, mines: usize) -> MsResult<Self> {
         if width * length > mines {
-            Ok(Self { width, length, mines })
+            Ok(Self {
+                width,
+                length,
+                mines,
+            })
         } else {
             Err(MinesweeperError::InvalidParameters)
         }
@@ -53,8 +57,11 @@ impl Config {
     pub fn square(&self, idx: usize) -> impl Iterator<Item = usize> {
         let len = self.length; // Copy
         let (row, col) = self.as_rc(idx);
-        Box::new((max(1, row) - 1..=min(self.width - 1, row + 1))
-            .flat_map(move |r| (max(1, col) - 1..=min(len - 1, col + 1)).map(move |c| r * len + c)))
+        Box::new(
+            (max(1, row) - 1..=min(self.width - 1, row + 1)).flat_map(move |r| {
+                (max(1, col) - 1..=min(len - 1, col + 1)).map(move |c| r * len + c)
+            }),
+        )
     }
 
     #[inline]

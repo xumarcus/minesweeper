@@ -2,7 +2,7 @@
 extern crate test;
 use test::Bencher;
 
-use minesweeper::{Minesweeper, Difficulty};
+use minesweeper::{Difficulty, Minesweeper};
 
 /* Iteration 1 (Naive)
 running 3 tests
@@ -25,7 +25,13 @@ fn bench_random(diff: &Difficulty, b: &mut Bencher) {
         }
         n += 1;
     });
-    println!("{:?} {:.1}% ({} / {})", diff, 100.0 * (solved as f64) / (n as f64), solved, n);
+    println!(
+        "{:?} {:.1}% ({} / {})",
+        diff,
+        100.0 * (solved as f64) / (n as f64),
+        solved,
+        n
+    );
 }
 
 #[bench]
