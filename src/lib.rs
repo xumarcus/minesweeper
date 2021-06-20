@@ -1,6 +1,3 @@
-#![feature(test)]
-extern crate test;
-
 use ordered_float::NotNan;
 use rand::{
     self,
@@ -178,7 +175,7 @@ impl Minesweeper {
     }
 
     #[rustfmt::skip]
-    pub fn from_difficulty(diff: Difficulty) -> Self {
+    pub fn from_difficulty(diff: &Difficulty) -> Self {
         let result = match diff {
             Difficulty::Beginner     => Self::new( 9,  9, 10),
             Difficulty::Intermediate => Self::new(16, 16, 40),
@@ -289,7 +286,6 @@ impl Minesweeper {
 #[cfg(test)]
 mod tests {
     use super::{Status::*, *};
-    use test::Bencher;
 
     fn get_inst() -> Minesweeper {
         Minesweeper {
@@ -663,21 +659,5 @@ Flagged: 10 / 10
 0. 1. 🚩 1. 0. 0. 0. 0. 0. 
 "
         )
-    }
-
-    #[bench]
-    #[should_panic]
-    fn bench_random_beginner(b: &mut Bencher) {
-        let mut solved = 0;
-        let mut n = 0;
-        b.iter(|| {
-            let mut inst = Minesweeper::from_difficulty(Difficulty::Beginner);
-            if inst.solve().is_ok() {
-                solved += 1;
-            }
-            n += 1;
-        });
-        // cargo +nightly bench -- --nocapture
-        println!("{:.3} ({} / {})", (solved as f64) / (n as f64), solved, n);
     }
 }
