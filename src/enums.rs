@@ -4,10 +4,8 @@ use thiserror::Error;
 pub enum MinesweeperError {
     #[error("InvalidParameters")]
     InvalidParameters,
-    #[error("IsAlreadySolved")]
-    IsAlreadySolved,
-    #[error("IsAlreadyFlagged")]
-    IsAlreadyFlagged,
+    #[error("FlaggedButNotBomb")]
+    FlaggedButNotBomb,
     #[error("RevealedBomb")]
     RevealedBomb,
 }

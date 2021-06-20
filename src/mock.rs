@@ -36,7 +36,7 @@ impl MockMinesweeper {
                 let row = w_gen.sample(&mut rng);
                 let col = l_gen.sample(&mut rng);
                 let idx = config.from_rc(row, col);
-                if idx != config.from_rc(config.width / 2, config.length / 2) && !is_bomb[idx] {
+                if idx != config.center() && !is_bomb[idx] {
                     is_bomb[idx] = true;
                     break;
                 }
@@ -44,6 +44,24 @@ impl MockMinesweeper {
         }
         let board = vec![Status::default(); config.size()];
         Self { board, config, is_bomb }
+    }
+
+    fn set_known(&mut self, idx: usize) -> MsResult<()> {
+        let Self { board, config, is_bomb } = self;
+        match board[idx] {
+            Status::Flagged => return Err(MinesweeperError::FlaggedButNotBomb),
+            Status::Known(_) => (),
+            _ => {
+                let count = config.square(idx).filter(|cidx| is_bomb[*cidx]).count();
+                board[idx] = Status::Known(count);
+                if count == 0 {
+                    for cidx in config.square(idx) {
+                        self.set_known(cidx)?;
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -81,21 +99,24 @@ impl fmt::Display for MockMinesweeper {
 impl Minesweeper for MockMinesweeper {
     fn reveal(&mut self, idx: usize) -> MsResult<()> {
         if self.is_bomb[idx] {
-            Err(MinesweeperError::RevealedBomb)
-        } else {
-            Ok(())
+            return Err(MinesweeperError::RevealedBomb);
         }
+        self.set_known(idx)?;
+        Ok(())
     }
 
     fn get_config(&self) -> Config {
         self.config
     }
 
-    fn get_cells(&self) -> &Vec<Status> {
+    fn get_board(&self) -> &Vec<Status> {
         &self.board
     }
 
-    fn get_cells_mut(&mut self) -> &mut Vec<Status> {
-        &mut self.board
+    fn set_board(&mut self, board: Vec<Status>) -> MsResult<()> {
+        self.board = board;
+        Ok(())
     }
 }
+
+impl SolveMinesweeper for MockMinesweeper {}

@@ -66,4 +66,9 @@ impl Config {
     pub fn from_rc(&self, row: usize, col: usize) -> usize {
         row * self.length + col
     }
+
+    #[inline]
+    pub fn center(&self) -> usize {
+        self.from_rc(self.width / 2, self.length / 2)
+    }
 }
