@@ -1,14 +1,12 @@
 use std::fmt;
-
-mod enums;
-use enums::*;
+use super::*;
 
 pub trait Cell {
     fn get(&self) -> Option<usize>;
     fn get_status(&self) -> Status;
     fn set_ok(&mut self) -> MsResult<()>;
     fn set_flag(&mut self) -> MsResult<()>;
-    fn set_count(&mut self) -> MsResult<()>;
+    fn set_count(&mut self, count: usize) -> MsResult<()>;
 }
 
 #[derive(Clone, Debug)]
@@ -31,7 +29,7 @@ impl fmt::Display for MockCell {
                 Status::Flagged => write!(f, "🚩")?,
                 Status::Marked => unreachable!("Wrong solution"),
                 Status::Unknown => write!(f, "💣")?,
-                Status::Known(x) => unreachable!("Is bomb"),
+                Status::Known(_) => unreachable!("Is bomb"),
             }
         }
         Ok(())
@@ -47,10 +45,10 @@ impl Cell for MockCell {
     }
 
     fn get_status(&self) -> Status {
-        self.status
+        self.status.clone()
     }
 
-    fn set_ok(&mut self) -> MsResult<()>; {
+    fn set_ok(&mut self) -> MsResult<()> {
         match self.status {
             Status::Unknown => {
                 self.status = Status::Marked;
@@ -61,7 +59,7 @@ impl Cell for MockCell {
         }
     }
 
-    fn set_flag(&mut self) -> MsResult<()>; {
+    fn set_flag(&mut self) -> MsResult<()> {
         match self.status {
             Status::Unknown => {
                 self.status = Status::Flagged;
@@ -72,7 +70,7 @@ impl Cell for MockCell {
         }
     }
 
-    fn set_count(&mut self, count: usize) -> MsResult<()>; {
+    fn set_count(&mut self, count: usize) -> MsResult<()> {
         if self.is_bomb {
             Err(MinesweeperError::RevealedBomb)
         } else {

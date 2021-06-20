@@ -1,4 +1,5 @@
 use thiserror::Error;
+
 #[derive(Clone, Debug, Error)]
 pub enum MinesweeperError {
     #[error("InvalidParameters")]
