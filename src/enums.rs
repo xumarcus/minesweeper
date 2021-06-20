@@ -10,10 +10,6 @@ pub enum MinesweeperError {
     IsAlreadyFlagged,
     #[error("RevealedBomb")]
     RevealedBomb,
-    #[error("SetInvalidStatus")]
-    SetInvalidStatus,
-    #[error("SetSameStatus")]
-    SetSameStatus,
 }
 
 pub type MsResult<T> = Result<T, MinesweeperError>;
@@ -24,6 +20,12 @@ pub enum Status {
     Known(usize),
     Marked,
     Unknown,
+}
+
+impl Default for Status {
+    fn default() -> Self {
+        Self::Unknown
+    }
 }
 
 #[derive(Clone, Debug)]
