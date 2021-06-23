@@ -17,8 +17,12 @@
 
 use minesweeper::*;
 
+use simple_logger::SimpleLogger;
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut inst = MockMinesweeper::new(Config::from_difficulty(Difficulty::Beginner));
-    inst.solve_logged()?;
+    SimpleLogger::new().init()?;
+    let mut inst = MockMinesweeper::from_difficulty(Difficulty::Beginner);
+    inst.solve()?;
+    println!("{}", Show(&inst));
     Ok(())
 }

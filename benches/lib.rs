@@ -41,13 +41,13 @@ Expert 1.4% (127 / 9301)
 test bench_random_expert       ... bench:     521,430 ns/iter (+/- 235,622)
 */
 
-// cargo +nightly  bench -- --nocapture
+// cargo +nightly bench -- --nocapture
 fn bench_random(diff: Difficulty, b: &mut Bencher) {
     let mut solved = 0;
     let mut n = 0;
     b.iter(|| {
-        let mut inst = MockMinesweeper::new(Config::from_difficulty(diff));
-        solved += inst.solve_silent().is_ok() as usize;
+        let mut inst = MockMinesweeper::from_difficulty(diff);
+        solved += inst.solve().is_ok() as usize;
         n += 1;
     });
     let percent = 100.0 * (solved as f64) / (n as f64);

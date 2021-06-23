@@ -19,17 +19,19 @@ use super::*;
 
 use std::cmp::{max, min};
 
-#[derive(Clone, Copy, Debug)]
-pub struct Config {
-    pub width: usize,
-    pub length: usize,
-    pub mines: usize,
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MinesweeperState {
+    pub board: Vec<Status>,
+    width: usize,
+    length: usize,
+    mines: usize,
 }
 
-impl Config {
+impl MinesweeperState {
     pub fn new(width: usize, length: usize, mines: usize) -> MsResult<Self> {
         (width * length > mines)
             .then(|| Self {
+                board: vec![Status::Unknown; width * length],
                 width,
                 length,
                 mines,
@@ -37,14 +39,25 @@ impl Config {
             .ok_or(MinesweeperError::InvalidParameters)
     }
 
-    #[rustfmt::skip]
-    pub fn from_difficulty(diff: Difficulty) -> Self {
-        let result = match diff {
-            Difficulty::Beginner     => Self::new( 9,  9, 10),
-            Difficulty::Intermediate => Self::new(16, 16, 40),
-            Difficulty::Expert       => Self::new(30, 16, 99),
-        };
-        result.unwrap()
+    #[inline]
+    pub fn width(&self) -> usize {
+        self.width
+    }
+
+    #[inline]
+    pub fn length(&self) -> usize {
+        self.length
+    }
+
+    #[inline]
+    pub fn mines(&self) -> usize {
+        self.mines
+    }
+
+    #[inline]
+    pub fn count(&self, status: Status) -> usize {
+        // Cache?
+        self.board.iter().filter(|status_| status_ == &&status).count()
     }
 
     #[inline]
@@ -59,13 +72,8 @@ impl Config {
             .flat_map(move |r| (max(1, col) - 1..=min(len - 1, col + 1)).map(move |c| r * len + c))
     }
 
-    pub fn square_filter_status<'a>(
-        &self,
-        board: &'a Vec<Status>,
-        idx: usize,
-        status: Status,
-    ) -> impl Iterator<Item = usize> + 'a {
-        self.square(idx).filter(move |cidx| board[*cidx] == status)
+    pub fn square_of(&self, idx: usize, status: Status) -> impl Iterator<Item = usize> + '_ {
+        self.square(idx).filter(move |cidx| self.board[*cidx] == status)
     }
 
     #[inline]
@@ -81,5 +89,23 @@ impl Config {
     #[inline]
     pub fn center(&self) -> usize {
         self.from_rc(self.width / 2, self.length / 2)
+    }
+
+    pub fn reduce(&self) -> Self {
+        let mut cl = self.clone();
+        for (idx, status) in self.board.iter().enumerate() {
+            if let Status::Known(count) = status {
+                let unknowns = self.square_of(idx, Status::Unknown).collect::<Vec<usize>>();
+                let sq_flags = self.square_of(idx, Status::Flagged).count();
+                for cidx in unknowns.iter() {
+                    if *count == sq_flags {
+                        cl.board[*cidx] = Status::Marked;
+                    } else if *count == unknowns.len() + sq_flags {
+                        cl.board[*cidx] = Status::Flagged;
+                    }
+                }
+            }
+        }
+        cl
     }
 }

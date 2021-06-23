@@ -21,104 +21,78 @@ use std::cmp::max;
 
 use ordered_float::NotNan;
 
-fn new_board(board: &Vec<Status>, config: Config) -> Vec<Status> {
-    let mut new_board: Vec<Status> = board.clone();
-    for (idx, status) in board.iter().enumerate() {
-        if let Status::Known(count) = status {
-            let unknowns = config.square_filter_status(board, idx, Status::Unknown).count();
-            let flaggeds = config.square_filter_status(board, idx, Status::Flagged).count();
-            if *count == flaggeds {
-                for cidx in config.square_filter_status(board, idx, Status::Unknown) {
-                    new_board[cidx] = Status::Marked;
-                }
-            } else if *count == unknowns + flaggeds {
-                for cidx in config.square_filter_status(board, idx, Status::Unknown) {
-                    new_board[cidx] = Status::Flagged;
-                }
-            }
-        }
-    }
-    new_board
-}
-
-fn csp(board: &Vec<Status>, config: Config) -> Vec<Status> {
-    for group in 0.. {
-        // do flood fill
-    }
-    vec![]
-}
-
-pub trait Minesweeper {
+pub trait Minesweeper: Sized {
     // These getters/setters needed for abstraction
-    fn get_config(&self) -> Config;
-    fn get_board(&self) -> &Vec<Status>;
-    fn set_board(&mut self, board: Vec<Status>);
+    fn get(&self) -> &MinesweeperState;
+    fn get_bombs(&self) -> Option<&Vec<bool>>;
+    fn set(&mut self, state: MinesweeperState);
 
     // Depends on implementation
     fn reveal(&mut self, idx: usize) -> MsResult<()>;
 
-    fn solve_silent(&mut self) -> MsResult<()> {
-        while let Some((idx, _)) = self.solve_next() {
+    fn solve(&mut self) -> MsResult<()> {
+        while let Some((idx, p)) = self.solve_next() {
+            log::debug!("Guess {:?}: {}", self.get().as_rc(idx), p);
             self.reveal(idx)?;
+            log::trace!("{}", Show(self));
         }
         Ok(())
     }
 
     // 1.0f64 is exact
     fn solve_next(&mut self) -> Option<(usize, f64)> {
-        let board = self.get_board();
-        let config = self.get_config();
-
-        if let Some(idx) = board.iter().position(|status| status == &Status::Marked) {
+        let mut state = self.get().clone();
+        if let Some(idx) = state
+            .board
+            .iter()
+            .position(|status| status == &Status::Marked)
+        {
             return Some((idx, 1.0));
         }
-        match board[config.center()] {
+        let center = state.center();
+        match state.board[center] {
             Status::Known(_) => (),
             Status::Flagged => unreachable!("Center cannot be bomb"),
-            _ => return Some((config.center(), 1.0)),
+            _ => return Some((center, 1.0)),
         }
-        let mut next_board = new_board(&board, config);
-        if board == &next_board {
-            let count_status =
-                |status| board.iter().filter(|status_| **status_ == status).count();
-            let not_flaggeds = config.mines - count_status(Status::Flagged);
-            let all_unknowns = count_status(Status::Unknown);
-            let base_prob = NotNan::new((not_flaggeds as f64) / (all_unknowns as f64)).ok()?;
-            let mut prob = vec![None; config.size()];
-            for (idx, status) in board.iter().enumerate() {
-                if let Status::Known(count) = status {
-                    let square_unknowns = config.square_filter_status(board, idx, Status::Unknown).count();
-                    let p = NotNan::new((*count as f64) / (square_unknowns as f64)).ok();
-                    for idx_sq in config.square(idx) {
-                        prob[idx_sq] = max(prob[idx_sq], p);
-                    }
+        loop {
+            let reduced = state.reduce();
+            if reduced == state {
+                break;
+            } else {
+                state = reduced;
+            }
+        }
+        self.set(state.clone());
+        if let Some(idx) = state
+            .board
+            .iter()
+            .position(|status| status == &Status::Marked)
+        {
+            return Some((idx, 1.0));
+        }
+
+        let unflags = state.mines() - state.count(Status::Flagged);
+        let unknowns = state.count(Status::Unknown);
+        let base_prob = NotNan::new((unflags as f64) / (unknowns as f64)).ok()?;
+        let mut prob = vec![None; state.size()];
+        for (idx, status) in state.board.iter().enumerate() {
+            if let Status::Known(count) = status {
+                let square_unknowns = state.square_of(idx, Status::Unknown).count();
+                let p = NotNan::new((*count as f64) / (square_unknowns as f64)).ok();
+                for idx_sq in state.square(idx) {
+                    prob[idx_sq] = max(prob[idx_sq], p);
                 }
             }
-            board
-                .iter()
-                .enumerate()
-                .filter_map(|(idx, status)| (status == &Status::Unknown).then(|| (idx, prob[idx].unwrap_or(base_prob))))
-                .min_by_key(|(_, p)| *p)
-                .map(|(idx, p)| (idx, p.into_inner()))
-        } else {
-            let mut next_next = new_board(&next_board, config);
-            while next_board != next_next {
-                next_board = next_next;
-                next_next = new_board(&next_board, config);
-            }
-            self.set_board(next_board);
-            self.solve_next()
         }
+        state
+            .board
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, status)| {
+                (status == &Status::Unknown).then(|| (idx, prob[idx].unwrap_or(base_prob)))
+            })
+            .min_by_key(|(_, p)| *p)
+            .map(|(idx, p)| (idx, p.into_inner()))
     }
 }
-
-pub trait LoggedMinesweeper: Minesweeper + fmt::Display {
-    // TODO use logger
-    fn solve_logged(&mut self) -> MsResult<()> {
-        println!("{}", self);
-        while let Some((idx, p)) = self.solve_next() {
-            println!("Guess {:?}: {:.3}", self.get_config().as_rc(idx), p);
-            self.reveal(idx)?;
-            println!("{}", self);
-        }
-        Ok

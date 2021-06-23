@@ -19,10 +19,10 @@ use thiserror::Error;
 
 #[derive(Clone, Copy, Debug, Error)]
 pub enum MinesweeperError {
-    #[error("InvalidParameters")]
-    InvalidParameters,
     #[error("FlaggedButNotBomb")]
     FlaggedButNotBomb,
+    #[error("InvalidParameters")]
+    InvalidParameters,
     #[error("RevealedBomb")]
     RevealedBomb,
 }

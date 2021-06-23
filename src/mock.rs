@@ -23,50 +23,51 @@ use rand::{
 };
 
 pub struct MockMinesweeper {
-    pub(super) board: Vec<Status>,
-    pub(super) config: Config,
-    is_bomb: Vec<bool>,
+    state: MinesweeperState,
+    bombs: Vec<bool>,
 }
 
 impl MockMinesweeper {
-    pub fn new(config: Config) -> Self {
+    pub fn new(width: usize, length: usize, mines: usize) -> MsResult<Self> {
+        let state = MinesweeperState::new(width, length, mines)?;
         let mut rng = rand::thread_rng();
-        let w_gen = Uniform::from(0..config.width);
-        let l_gen = Uniform::from(0..config.length);
-        let mut is_bomb = vec![false; config.size()];
-        for _ in 0..config.mines {
+        let w_gen = Uniform::from(0..width);
+        let l_gen = Uniform::from(0..length);
+        let mut bombs = vec![false; state.size()];
+        for _ in 0..mines {
             loop {
                 let row = w_gen.sample(&mut rng);
                 let col = l_gen.sample(&mut rng);
-                let idx = config.from_rc(row, col);
-                if idx != config.center() && !is_bomb[idx] {
-                    is_bomb[idx] = true;
+                let idx = state.from_rc(row, col);
+                if idx != state.center() && !bombs[idx] {
+                    bombs[idx] = true;
                     break;
                 }
             }
         }
-        let board = vec![Status::default(); config.size()];
-        Self {
-            board,
-            config,
-            is_bomb,
-        }
+        Ok(Self { state, bombs })
+    }
+
+    #[rustfmt::skip]
+    pub fn from_difficulty(diff: Difficulty) -> Self {
+        let result = match diff {
+            Difficulty::Beginner     => Self::new( 9,  9, 10),
+            Difficulty::Intermediate => Self::new(16, 16, 40),
+            Difficulty::Expert       => Self::new(30, 16, 99),
+        };
+        result.unwrap()
     }
 
     fn set_known(&mut self, idx: usize) -> MsResult<()> {
-        let Self {
-            board,
-            config,
-            is_bomb,
-        } = self;
-        match board[idx] {
+        let Self { state, bombs } = self;
+        match state.board[idx] {
             Status::Flagged => return Err(MinesweeperError::FlaggedButNotBomb),
             Status::Known(_) => (),
             _ => {
-                let count = config.square(idx).filter(|cidx| is_bomb[*cidx]).count();
-                board[idx] = Status::Known(count);
-                if count == 0 {
-                    for cidx in config.square(idx) {
+                let count = state.square(idx).filter(|cidx| bombs[*cidx]).count();
+                state.board[idx] = Status::Known(count);
+                if count == 0 { // Should have no flags as count is zero
+                    for cidx in state.square(idx) {
                         self.set_known(cidx)?;
                     }
                 }
@@ -76,64 +77,23 @@ impl MockMinesweeper {
     }
 }
 
-impl fmt::Display for MockMinesweeper {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let Self {
-            board,
-            config,
-            is_bomb,
-        } = self;
-        let flagged_count = board
-            .iter()
-            .filter(|status| status == &&Status::Flagged)
-            .count();
-        writeln!(f, "Dimensions: {} x {}", config.width, config.length)?;
-        writeln!(f, "Flagged: {} / {}", flagged_count, config.mines)?;
-        for row in 0..config.width {
-            let sidx = row * config.length;
-            for idx in sidx..sidx + config.length {
-                if is_bomb[idx] {
-                    match board[idx] {
-                        Status::Flagged => write!(f, "🚩")?,
-                        Status::Known(_) => unreachable!("Is bomb"),
-                        Status::Marked => unreachable!("Wrong solution"),
-                        Status::Unknown => write!(f, "💣")?,
-                    }
-                } else {
-                    match board[idx] {
-                        Status::Flagged => unreachable!("Wrong flag"),
-                        Status::Known(x) => write!(f, "{}.", x)?,
-                        Status::Marked => write!(f, "✔️")?,
-                        Status::Unknown => write!(f, "❔")?,
-                    }
-                }
-            }
-            write!(f, "\n")?;
-        }
-        Ok(())
-    }
-}
-
 impl Minesweeper for MockMinesweeper {
-    fn get_config(&self) -> Config {
-        self.config
+    fn get(&self) -> &MinesweeperState {
+        &self.state
     }
 
-    fn get_board(&self) -> &Vec<Status> {
-        &self.board
+    fn get_bombs(&self) -> Option<&Vec<bool>> {
+        Some(&self.bombs)
     }
 
-    fn set_board(&mut self, board: Vec<Status>) {
-        self.board = board;
+    fn set(&mut self, state: MinesweeperState) {
+        self.state = state;
     }
 
     fn reveal(&mut self, idx: usize) -> MsResult<()> {
-        if self.is_bomb[idx] {
+        if self.bombs[idx] {
             return Err(MinesweeperError::RevealedBomb);
         }
-        self.set_known(idx)?;
-        Ok(())
+        self.set_known(idx)
     }
 }
-
-impl LoggedMinesweeper for MockMinesweeper {}

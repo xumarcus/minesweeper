@@ -15,16 +15,19 @@
 // You should have received a copy of the GNU General Public License
 // along with minesweeper.  If not, see <http://www.gnu.org/licenses/>.
 
-mod config;
-pub use config::Config;
-
 mod enums;
 pub use enums::*;
 
 mod mock;
 pub use mock::MockMinesweeper;
 
+mod show;
+pub use show::Show;
+
 mod solve;
 pub use solve::*;
+
+mod state;
+pub use state::MinesweeperState;
 
 use std::fmt;
