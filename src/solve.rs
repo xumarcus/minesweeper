@@ -22,23 +22,17 @@ use std::cmp::max;
 use ordered_float::NotNan;
 
 fn new_board(board: &Vec<Status>, config: Config) -> Vec<Status> {
-    let square_status = |idx, status| {
-        config
-            .square(idx)
-            .filter(move |cidx| board[*cidx] == status)
-    };
-
     let mut new_board: Vec<Status> = board.clone();
     for (idx, status) in board.iter().enumerate() {
         if let Status::Known(count) = status {
-            let unknowns = square_status(idx, Status::Unknown).count();
-            let flaggeds = square_status(idx, Status::Flagged).count();
+            let unknowns = config.square_filter_status(board, idx, Status::Unknown).count();
+            let flaggeds = config.square_filter_status(board, idx, Status::Flagged).count();
             if *count == flaggeds {
-                for cidx in square_status(idx, Status::Unknown) {
+                for cidx in config.square_filter_status(board, idx, Status::Unknown) {
                     new_board[cidx] = Status::Marked;
                 }
             } else if *count == unknowns + flaggeds {
-                for cidx in square_status(idx, Status::Unknown) {
+                for cidx in config.square_filter_status(board, idx, Status::Unknown) {
                     new_board[cidx] = Status::Flagged;
                 }
             }
@@ -47,82 +41,84 @@ fn new_board(board: &Vec<Status>, config: Config) -> Vec<Status> {
     new_board
 }
 
-pub trait Minesweeper: fmt::Display {
+fn csp(board: &Vec<Status>, config: Config) -> Vec<Status> {
+    for group in 0.. {
+        // do flood fill
+    }
+    vec![]
+}
+
+pub trait Minesweeper {
     // These getters/setters needed for abstraction
     fn get_config(&self) -> Config;
     fn get_board(&self) -> &Vec<Status>;
-    fn set_board(&mut self, board: Vec<Status>) -> MsResult<()>;
+    fn set_board(&mut self, board: Vec<Status>);
 
     // Depends on implementation
     fn reveal(&mut self, idx: usize) -> MsResult<()>;
 
-    // TODO use logger
-    fn solve(&mut self) -> MsResult<()> {
-        println!("{}", self);
-        while let Some((idx, p)) = self.solve_next()? {
-            println!("Guess {:?}: {:.3}", self.get_config().as_rc(idx), p);
+    fn solve_silent(&mut self) -> MsResult<()> {
+        while let Some((idx, _)) = self.solve_next() {
             self.reveal(idx)?;
-            println!("{}", self);
         }
         Ok(())
     }
 
     // 1.0f64 is exact
-    fn solve_next(&mut self) -> MsResult<Option<(usize, f64)>> {
+    fn solve_next(&mut self) -> Option<(usize, f64)> {
+        let board = self.get_board();
         let config = self.get_config();
 
-        if let Some((idx, _)) = self
-            .get_board()
-            .iter()
-            .enumerate()
-            .find(|(_, status)| status == &&Status::Marked)
-        {
-            return Ok(Some((idx, 1.0)));
+        if let Some(idx) = board.iter().position(|status| status == &Status::Marked) {
+            return Some((idx, 1.0));
         }
-
-        let board = self.get_board();
-        if let Status::Known(_) = board[config.center()] {
-            let mut next_board = new_board(&board, config);
-            if board == &next_board {
-                let count_status =
-                    |status| board.iter().filter(|status_| **status_ == status).count();
-                let not_flaggeds = config.mines - count_status(Status::Flagged);
-                let all_unknowns = count_status(Status::Unknown);
-                let base_prob = NotNan::new((not_flaggeds as f64) / (all_unknowns as f64));
-                let mut prob = vec![None; config.size()];
-                for (idx, status) in board.iter().enumerate() {
-                    if let Status::Known(count) = status {
-                        let square_unknowns = config
-                            .square(idx)
-                            .filter(|cidx| board[*cidx] == Status::Unknown)
-                            .count();
-                        let p = NotNan::new((*count as f64) / (square_unknowns as f64)).ok();
-                        for idx_sq in config.square(idx) {
-                            prob[idx_sq] = max(prob[idx_sq], p);
-                        }
+        match board[config.center()] {
+            Status::Known(_) => (),
+            Status::Flagged => unreachable!("Center cannot be bomb"),
+            _ => return Some((config.center(), 1.0)),
+        }
+        let mut next_board = new_board(&board, config);
+        if board == &next_board {
+            let count_status =
+                |status| board.iter().filter(|status_| **status_ == status).count();
+            let not_flaggeds = config.mines - count_status(Status::Flagged);
+            let all_unknowns = count_status(Status::Unknown);
+            let base_prob = NotNan::new((not_flaggeds as f64) / (all_unknowns as f64)).ok()?;
+            let mut prob = vec![None; config.size()];
+            for (idx, status) in board.iter().enumerate() {
+                if let Status::Known(count) = status {
+                    let square_unknowns = config.square_filter_status(board, idx, Status::Unknown).count();
+                    let p = NotNan::new((*count as f64) / (square_unknowns as f64)).ok();
+                    for idx_sq in config.square(idx) {
+                        prob[idx_sq] = max(prob[idx_sq], p);
                     }
                 }
-                Ok(board
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, status)| status == &&Status::Unknown)
-                    .map(|(idx, _)| {
-                        let p = prob[idx].unwrap_or(base_prob.expect("`all_unknowns` != 0"));
-                        (idx, p)
-                    })
-                    .min_by_key(|(_, p)| *p)
-                    .map(|(idx, p)| (idx, p.into_inner())))
-            } else {
-                let mut next_next = new_board(&next_board, config);
-                while next_board != next_next {
-                    next_board = next_next;
-                    next_next = new_board(&next_board, config);
-                }
-                self.set_board(next_board)?;
-                self.solve_next()
             }
+            board
+                .iter()
+                .enumerate()
+                .filter_map(|(idx, status)| (status == &Status::Unknown).then(|| (idx, prob[idx].unwrap_or(base_prob))))
+                .min_by_key(|(_, p)| *p)
+                .map(|(idx, p)| (idx, p.into_inner()))
         } else {
-            Ok(Some((config.center(), 1.0)))
+            let mut next_next = new_board(&next_board, config);
+            while next_board != next_next {
+                next_board = next_next;
+                next_next = new_board(&next_board, config);
+            }
+            self.set_board(next_board);
+            self.solve_next()
         }
     }
 }
+
+pub trait LoggedMinesweeper: Minesweeper + fmt::Display {
+    // TODO use logger
+    fn solve_logged(&mut self) -> MsResult<()> {
+        println!("{}", self);
+        while let Some((idx, p)) = self.solve_next() {
+            println!("Guess {:?}: {:.3}", self.get_config().as_rc(idx), p);
+            self.reveal(idx)?;
+            println!("{}", self);
+        }
+        Ok

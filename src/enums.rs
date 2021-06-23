@@ -17,7 +17,7 @@
 
 use thiserror::Error;
 
-#[derive(Clone, Debug, Error)]
+#[derive(Clone, Copy, Debug, Error)]
 pub enum MinesweeperError {
     #[error("InvalidParameters")]
     InvalidParameters,
@@ -29,7 +29,7 @@ pub enum MinesweeperError {
 
 pub type MsResult<T> = Result<T, MinesweeperError>;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Status {
     Flagged,
     Known(usize),
@@ -43,7 +43,7 @@ impl Default for Status {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub enum Difficulty {
     Beginner,
     Intermediate,

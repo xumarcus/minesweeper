@@ -28,15 +28,13 @@ pub struct Config {
 
 impl Config {
     pub fn new(width: usize, length: usize, mines: usize) -> MsResult<Self> {
-        if width * length > mines {
-            Ok(Self {
+        (width * length > mines)
+            .then(|| Self {
                 width,
                 length,
                 mines,
             })
-        } else {
-            Err(MinesweeperError::InvalidParameters)
-        }
+            .ok_or(MinesweeperError::InvalidParameters)
     }
 
     #[rustfmt::skip]
@@ -57,11 +55,17 @@ impl Config {
     pub fn square(&self, idx: usize) -> impl Iterator<Item = usize> {
         let len = self.length; // Copy
         let (row, col) = self.as_rc(idx);
-        Box::new(
-            (max(1, row) - 1..=min(self.width - 1, row + 1)).flat_map(move |r| {
-                (max(1, col) - 1..=min(len - 1, col + 1)).map(move |c| r * len + c)
-            }),
-        )
+        (max(1, row) - 1..=min(self.width - 1, row + 1))
+            .flat_map(move |r| (max(1, col) - 1..=min(len - 1, col + 1)).map(move |c| r * len + c))
+    }
+
+    pub fn square_filter_status<'a>(
+        &self,
+        board: &'a Vec<Status>,
+        idx: usize,
+        status: Status,
+    ) -> impl Iterator<Item = usize> + 'a {
+        self.square(idx).filter(move |cidx| board[*cidx] == status)
     }
 
     #[inline]

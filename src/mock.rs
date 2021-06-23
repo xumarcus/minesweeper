@@ -123,9 +123,8 @@ impl Minesweeper for MockMinesweeper {
         &self.board
     }
 
-    fn set_board(&mut self, board: Vec<Status>) -> MsResult<()> {
+    fn set_board(&mut self, board: Vec<Status>) {
         self.board = board;
-        Ok(())
     }
 
     fn reveal(&mut self, idx: usize) -> MsResult<()> {
@@ -136,3 +135,5 @@ impl Minesweeper for MockMinesweeper {
         Ok(())
     }
 }
+
+impl LoggedMinesweeper for MockMinesweeper {}
