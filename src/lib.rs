@@ -21,13 +21,13 @@ pub use enums::*;
 mod mock;
 pub use mock::MockMinesweeper;
 
-mod show;
-pub use show::Show;
-
 mod solve;
-pub use solve::*;
+pub use solve::Solver;
 
 mod state;
 pub use state::MinesweeperState;
+
+mod sweep;
+use sweep::Minesweeper;
 
 use std::fmt;

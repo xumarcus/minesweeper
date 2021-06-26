@@ -19,12 +19,14 @@ use thiserror::Error;
 
 #[derive(Clone, Copy, Debug, Error)]
 pub enum MinesweeperError {
-    #[error("FlaggedButNotBomb")]
-    FlaggedButNotBomb,
-    #[error("InvalidParameters")]
-    InvalidParameters,
+    #[error("AllCellsAreMines")]
+    AllCellsAreMines,
+    #[error("FoundFlaggedNonBomb")]
+    FoundFlaggedNonBomb(usize),
+    #[error("InvalidFlag")]
+    InvalidFlag(usize),
     #[error("RevealedBomb")]
-    RevealedBomb,
+    RevealedBomb(usize),
 }
 
 pub type MsResult<T> = Result<T, MinesweeperError>;

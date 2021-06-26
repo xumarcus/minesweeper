@@ -21,8 +21,7 @@ use simple_logger::SimpleLogger;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     SimpleLogger::new().init()?;
-    let mut inst = MockMinesweeper::from_difficulty(Difficulty::Beginner);
-    inst.solve()?;
-    println!("{}", Show(&inst));
+    let inst = MockMinesweeper::from_difficulty(Difficulty::Beginner);
+    Solver::new(inst).solve()?;
     Ok(())
 }

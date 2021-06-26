@@ -57,43 +57,39 @@ impl MockMinesweeper {
         };
         result.unwrap()
     }
-
-    fn set_known(&mut self, idx: usize) -> MsResult<()> {
-        let Self { state, bombs } = self;
-        match state.board[idx] {
-            Status::Flagged => return Err(MinesweeperError::FlaggedButNotBomb),
-            Status::Known(_) => (),
-            _ => {
-                let count = state.square(idx).filter(|cidx| bombs[*cidx]).count();
-                state.board[idx] = Status::Known(count);
-                if count == 0 { // Should have no flags as count is zero
-                    for cidx in state.square(idx) {
-                        self.set_known(cidx)?;
-                    }
-                }
-            }
-        }
-        Ok(())
-    }
 }
 
 impl Minesweeper for MockMinesweeper {
-    fn get(&self) -> &MinesweeperState {
-        &self.state
-    }
-
     fn get_bombs(&self) -> Option<&Vec<bool>> {
         Some(&self.bombs)
     }
 
-    fn set(&mut self, state: MinesweeperState) {
-        self.state = state;
+    fn get_state(&self) -> &MinesweeperState {
+        &self.state
+    }
+
+    fn pull(&mut self) -> MsResult<MinesweeperState> {
+        Ok(self.state.clone())
+    }
+
+    fn flag(&mut self, idx: usize) -> MsResult<()> {
+        if !self.bombs[idx] || self.state.board()[idx] == Status::Flagged {
+            Err(MinesweeperError::InvalidFlag(idx))
+        } else {
+            Ok(()) // Noop cuz mock
+        }
     }
 
     fn reveal(&mut self, idx: usize) -> MsResult<()> {
         if self.bombs[idx] {
-            return Err(MinesweeperError::RevealedBomb);
+            Err(MinesweeperError::RevealedBomb(idx))
+        } else {
+            self.state.set_known(idx, &self.bombs)
         }
-        self.set_known(idx)
+    }
+
+    fn set_internal(&mut self, state: MinesweeperState) -> MsResult<()> {
+        self.state = state;
+        Ok(())
     }
 }
