@@ -22,14 +22,6 @@ use std::cmp::{max, min};
 use ordered_float::NotNan;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-enum Grouping {
-    Assigned(usize),
-    Ineligible,
-    Interior,
-    Unassigned,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MinesweeperState {
     board: Vec<Status>,
     width: usize,
@@ -150,50 +142,44 @@ impl MinesweeperState {
         for idx in 0..self.size() {
             self.make_consistent(idx)?;
         }
-        let mut grouping = self.board
+        let mut is_grouped = self.board
             .iter()
             .enumerate()
             .map(|(idx, status)| match status {
-                Status::Known(x) => {
-                    if x != &0 && self.square_of(idx, Status::Unknown).count() != 0 {
-                        Grouping::Unassigned
-                    } else {
-                        Grouping::Interior
-                    }
-                }
-                Status::Unknown => Grouping::Unassigned,
-                _ => Grouping::Ineligible,
+                Status::Known(x) => x != &0 && self.square_of(idx, Status::Unknown).count() != 0,
+                Status::Unknown => false,
+                _ => true,
             })
-            .collect::<Vec<Grouping>>();
+            .collect::<Vec<bool>>();
         let mut unknowns_groups: Vec<Vec<usize>> = Vec::new();
         for (idx, status) in self.board.iter().enumerate() {
             if let Status::Known(x) = status {
-                if x != &0 && self.square_of(idx, Status::Unknown).count() != 0 && grouping[idx] == Grouping::Unassigned {
+                if x != &0 && self.square_of(idx, Status::Unknown).count() != 0 && !is_grouped[idx] {
                     let mut group = Vec::new();
-                    self.set_group(idx, unknowns_groups.len(), &mut group, &mut grouping);
+                    self.set_group(idx, unknowns_groups.len(), &mut group, &mut is_grouped);
                     unknowns_groups.push(group);
                 }
             }
         }
-        log::trace!("{:?}", grouping);
+        log::trace!("{:?}", is_grouped);
         Ok(())
     }
 
-    fn set_group(&self, idx: usize, id: usize, group: &mut Vec<usize>, grouping: &mut Vec<Grouping>) {
-        if grouping[idx] != Grouping::Unassigned {
+    fn set_group(&self, idx: usize, id: usize, group: &mut Vec<usize>, is_grouped: &mut Vec<bool>) {
+        if is_grouped[idx] {
             return;
         }
-        grouping[idx] = Grouping::Assigned(id);
+        is_grouped[idx] = true;
         match self.board[idx] {
             Status::Known(_) => {
                 for cidx in self.square(idx) {
-                    self.set_group(cidx, id, group, grouping);
+                    self.set_group(cidx, id, group, is_grouped);
                 }
             },
             Status::Unknown => {
                 for cidx in self.square(idx) {
                     if self.board[cidx] != Status::Unknown {
-                        self.set_group(cidx, id, group, grouping);
+                        self.set_group(cidx, id, group, is_grouped);
                     }
                 }
             },
