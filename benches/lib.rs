@@ -41,13 +41,22 @@ Expert 1.4% (127 / 9301)
 test bench_random_expert       ... bench:     521,430 ns/iter (+/- 235,622)
 */
 
+/* Iteration 3 (Naive)
+Beginner 72.5% (55270 / 76201)
+test bench_random_beginner     ... bench:      44,528 ns/iter (+/- 3,481)
+Intermediate 40.1% (7813 / 19501)
+test bench_random_intermediate ... bench:     191,858 ns/iter (+/- 31,416)
+Expert 1.3% (241 / 18901)
+test bench_random_expert       ... bench:     284,593 ns/iter (+/- 78,911)
+*/
+
 // cargo +nightly bench -- --nocapture
 fn bench_random(diff: Difficulty, b: &mut Bencher) {
     let mut solved = 0;
     let mut n = 0;
     b.iter(|| {
-        let mut inst = MockMinesweeper::from_difficulty(diff);
-        solved += inst.solve().is_ok() as usize;
+        let inst = MockMinesweeper::from_difficulty(diff);
+        solved += Solver::new(inst).solve().is_ok() as usize;
         n += 1;
     });
     let percent = 100.0 * (solved as f64) / (n as f64);
