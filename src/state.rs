@@ -22,6 +22,14 @@ use std::cmp::{max, min};
 use ordered_float::NotNan;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+enum Grouping {
+    Assigned(usize),
+    Ineligible,
+    Interior,
+    Unassigned,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MinesweeperState {
     board: Vec<Status>,
     width: usize,
@@ -101,7 +109,7 @@ impl MinesweeperState {
 
     pub fn set_known(&mut self, idx: usize, bombs: &Vec<bool>) -> MsResult<()> {
         match self.board[idx] {
-            Status::Flagged => Err(MinesweeperError::FoundFlaggedNonBomb(idx)),
+            Status::Flagged => unreachable!("{} is flagged but not bomb", idx),
             Status::Known(_) => Ok(()),
             _ => {
                 let count = self.square(idx).filter(|cidx| bombs[*cidx]).count();
@@ -117,47 +125,98 @@ impl MinesweeperState {
         }
     }
 
-    pub fn make_consistent(&mut self, idx: usize) {
+    pub fn make_consistent(&mut self, idx: usize) -> MsResult<()> {
         if let Status::Known(count) = self.board[idx] {
             let unknowns = self.square_of(idx, Status::Unknown).collect::<Vec<usize>>();
-            let sq_flags = self.square_of(idx, Status::Flagged).count();
+            let minimum = self.square_of(idx, Status::Flagged).count();
+            let maximum = minimum + unknowns.len();
             for cidx in unknowns.iter() {
-                if count == sq_flags {
+                if count < minimum || count > maximum {
+                    return Err(MinesweeperError::NumberOfMinesOutOfRange);
+                } else if count == minimum {
                     self.board[*cidx] = Status::Marked;
-                } else if count == unknowns.len() + sq_flags {
+                } else if count == maximum {
                     self.board[*cidx] = Status::Flagged;
                     for ccidx in self.square(*cidx) {
-                        self.make_consistent(ccidx);
+                        self.make_consistent(ccidx)?;
                     }
                 }
             }
         }
+        Ok(())
     }
 
-    pub fn step(&self) -> Self {
-        let mut clone = self.clone();
+    pub fn step(&mut self) -> MsResult<()> {
         for idx in 0..self.size() {
-            clone.make_consistent(idx);
+            self.make_consistent(idx)?;
         }
-        clone
+        let mut grouping = self.board
+            .iter()
+            .enumerate()
+            .map(|(idx, status)| match status {
+                Status::Known(x) => {
+                    if x != &0 && self.square_of(idx, Status::Unknown).count() != 0 {
+                        Grouping::Unassigned
+                    } else {
+                        Grouping::Interior
+                    }
+                }
+                Status::Unknown => Grouping::Unassigned,
+                _ => Grouping::Ineligible,
+            })
+            .collect::<Vec<Grouping>>();
+        let mut unknowns_groups: Vec<Vec<usize>> = Vec::new();
+        for (idx, status) in self.board.iter().enumerate() {
+            if let Status::Known(x) = status {
+                if x != &0 && self.square_of(idx, Status::Unknown).count() != 0 && grouping[idx] == Grouping::Unassigned {
+                    let mut group = Vec::new();
+                    self.set_group(idx, unknowns_groups.len(), &mut group, &mut grouping);
+                    unknowns_groups.push(group);
+                }
+            }
+        }
+        log::trace!("{:?}", grouping);
+        Ok(())
+    }
+
+    fn set_group(&self, idx: usize, id: usize, group: &mut Vec<usize>, grouping: &mut Vec<Grouping>) {
+        if grouping[idx] != Grouping::Unassigned {
+            return;
+        }
+        grouping[idx] = Grouping::Assigned(id);
+        match self.board[idx] {
+            Status::Known(_) => {
+                for cidx in self.square(idx) {
+                    self.set_group(cidx, id, group, grouping);
+                }
+            },
+            Status::Unknown => {
+                for cidx in self.square(idx) {
+                    if self.board[cidx] != Status::Unknown {
+                        self.set_group(cidx, id, group, grouping);
+                    }
+                }
+            },
+            _ => unreachable!("Ineligible for grouping"),
+        }
     }
 
     pub fn fast_search(&self) -> Option<(usize, f64)> {
         if let Some(idx) = self.pos_of(Status::Marked) {
-            Some((idx, 1.0))
+            Some((idx, 0.0))
         } else {
             let center = self.center();
             match self.board[center] {
                 Status::Known(_) => None,
                 Status::Flagged => unreachable!("Center cannot be bomb"),
-                _ => Some((center, 1.0)),
+                _ => Some((center, 0.0)),
             }
         }
     }
 
     pub fn slow_search(&self) -> Option<(usize, f64)> {
         if let Some(idx) = self.pos_of(Status::Marked) {
-            Some((idx, 1.0))
+            Some((idx, 0.0))
         } else {
             let unflags = self.mines() - self.count(Status::Flagged);
             let unknowns = self.count(Status::Unknown);

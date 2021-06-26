@@ -17,11 +17,14 @@
 
 use minesweeper::*;
 
+use std::env;
+
 use simple_logger::SimpleLogger;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     SimpleLogger::new().init()?;
-    let inst = MockMinesweeper::from_difficulty(Difficulty::Beginner);
+    let seed = env::args().nth(1).and_then(|s| s.parse::<u64>().ok());
+    let inst = MockMinesweeper::new(16, 16, 40, seed)?;
     Solver::new(inst).solve()?;
     Ok(())
 }

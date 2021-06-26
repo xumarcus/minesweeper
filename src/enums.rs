@@ -21,10 +21,8 @@ use thiserror::Error;
 pub enum MinesweeperError {
     #[error("AllCellsAreMines")]
     AllCellsAreMines,
-    #[error("FoundFlaggedNonBomb")]
-    FoundFlaggedNonBomb(usize),
-    #[error("InvalidFlag")]
-    InvalidFlag(usize),
+    #[error("NumberOfMinesOutOfRange")]
+    NumberOfMinesOutOfRange,
     #[error("RevealedBomb")]
     RevealedBomb(usize),
 }

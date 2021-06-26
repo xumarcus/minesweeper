@@ -17,6 +17,12 @@
 
 use super::*;
 
+fn next_state(state: &MinesweeperState) -> MsResult<MinesweeperState> {
+    let mut next = state.clone();
+    next.step()?;
+    Ok(next)
+}
+
 pub trait Minesweeper {
     fn get_bombs(&self) -> Option<&Vec<bool>>;
     fn get_state(&self) -> &MinesweeperState;
@@ -31,7 +37,7 @@ pub trait Minesweeper {
             self.reveal(idx)?;
             Ok(Some((idx, p)))
         } else {
-            let next_state = state.step();
+            let next_state = next_state(&state)?;
             let info = next_state.slow_search();
             for idx in state
                 .board()

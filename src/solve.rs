@@ -52,9 +52,9 @@ impl<T: Sized + Minesweeper> fmt::Display for Solver<T> {
                 }
             } else {
                 match status {
-                    Status::Flagged => unreachable!("Wrong flag"),
+                    Status::Flagged => write!(f, "🏁")?,
                     Status::Known(x) => write!(f, "{}.", x)?,
-                    Status::Marked => write!(f, "✔️")?,
+                    Status::Marked => write!(f, "✅")?,
                     Status::Unknown => write!(f, "❔")?,
                 }
             }

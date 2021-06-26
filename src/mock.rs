@@ -19,6 +19,8 @@ use super::*;
 
 use rand::{
     self,
+    SeedableRng,
+    rngs::StdRng,
     distributions::{Distribution, Uniform},
 };
 
@@ -28,9 +30,11 @@ pub struct MockMinesweeper {
 }
 
 impl MockMinesweeper {
-    pub fn new(width: usize, length: usize, mines: usize) -> MsResult<Self> {
+    pub fn new(width: usize, length: usize, mines: usize, seed: Option<u64>) -> MsResult<Self> {
         let state = MinesweeperState::new(width, length, mines)?;
-        let mut rng = rand::thread_rng();
+        let seed = seed.unwrap_or_else(|| rand::random::<u64>());
+        log::info!("Seed is {}", seed);
+        let mut rng = StdRng::seed_from_u64(seed);
         let w_gen = Uniform::from(0..width);
         let l_gen = Uniform::from(0..length);
         let mut bombs = vec![false; state.size()];
@@ -51,9 +55,9 @@ impl MockMinesweeper {
     #[rustfmt::skip]
     pub fn from_difficulty(diff: Difficulty) -> Self {
         let result = match diff {
-            Difficulty::Beginner     => Self::new( 9,  9, 10),
-            Difficulty::Intermediate => Self::new(16, 16, 40),
-            Difficulty::Expert       => Self::new(30, 16, 99),
+            Difficulty::Beginner     => Self::new( 9,  9, 10, None),
+            Difficulty::Intermediate => Self::new(16, 16, 40, None),
+            Difficulty::Expert       => Self::new(30, 16, 99, None),
         };
         result.unwrap()
     }
@@ -73,11 +77,8 @@ impl Minesweeper for MockMinesweeper {
     }
 
     fn flag(&mut self, idx: usize) -> MsResult<()> {
-        if !self.bombs[idx] || self.state.board()[idx] == Status::Flagged {
-            Err(MinesweeperError::InvalidFlag(idx))
-        } else {
-            Ok(()) // Noop cuz mock
-        }
+        debug_assert!(self.bombs[idx] && self.state.board()[idx] != Status::Flagged);
+        Ok(()) // Noop cuz mock
     }
 
     fn reveal(&mut self, idx: usize) -> MsResult<()> {
