@@ -33,7 +33,7 @@ impl MockMinesweeper {
     pub fn new(width: usize, length: usize, mines: usize, seed: Option<u64>) -> MsResult<Self> {
         let state = MinesweeperState::new(width, length, mines)?;
         let seed = seed.unwrap_or_else(|| rand::random::<u64>());
-        log::info!("Seed is {}", seed);
+        log::debug!("Create mock with seed {}", seed);
         let mut rng = StdRng::seed_from_u64(seed);
         let w_gen = Uniform::from(0..width);
         let l_gen = Uniform::from(0..length);
@@ -85,7 +85,10 @@ impl Minesweeper for MockMinesweeper {
         if self.bombs[idx] {
             Err(MinesweeperError::RevealedBomb(idx))
         } else {
-            self.state.set_known(idx, &self.bombs)
+            match self.state.board()[idx] {
+                x @ (Status::Flagged | Status::Known(_)) => unreachable!("{}: {:?}", idx, x),
+                _ => self.state.set_known(idx, &self.bombs)
+            }
         }
     }
 

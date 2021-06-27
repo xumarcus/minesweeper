@@ -19,8 +19,6 @@ use super::*;
 
 use std::cmp::{max, min};
 
-use ordered_float::NotNan;
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MinesweeperState {
     board: Vec<Status>,
@@ -38,7 +36,7 @@ impl MinesweeperState {
                 length,
                 mines,
             })
-            .ok_or(MinesweeperError::AllCellsAreMines)
+            .ok_or(MinesweeperError::NumberOfMinesOutOfRange)
     }
 
     #[inline]
@@ -99,6 +97,20 @@ impl MinesweeperState {
         self.square(idx).filter(move |cidx| self.board[*cidx] == status)
     }
 
+    pub fn step(&mut self) -> MsResult<()> {
+        for idx in 0..self.size() {
+            self.make_consistent(idx)?;
+        }
+        Ok(())
+    }
+
+    pub fn get_known(&self, idx: usize) -> Option<usize> {
+        match self.board[idx] {
+            Status::Known(x) => Some(x),
+            _ => None
+        }
+    }
+
     pub fn set_known(&mut self, idx: usize, bombs: &Vec<bool>) -> MsResult<()> {
         match self.board[idx] {
             Status::Flagged => unreachable!("{} is flagged but not bomb", idx),
@@ -138,48 +150,65 @@ impl MinesweeperState {
         Ok(())
     }
 
-    pub fn step(&mut self) -> MsResult<()> {
-        for idx in 0..self.size() {
-            self.make_consistent(idx)?;
-        }
-        let mut is_grouped = self.board
-            .iter()
-            .enumerate()
-            .map(|(idx, status)| match status {
-                Status::Known(x) => x != &0 && self.square_of(idx, Status::Unknown).count() != 0,
-                Status::Unknown => false,
-                _ => true,
-            })
-            .collect::<Vec<bool>>();
-        let mut unknowns_groups: Vec<Vec<usize>> = Vec::new();
-        for (idx, status) in self.board.iter().enumerate() {
-            if let Status::Known(x) = status {
-                if x != &0 && self.square_of(idx, Status::Unknown).count() != 0 && !is_grouped[idx] {
-                    let mut group = Vec::new();
-                    self.set_group(idx, unknowns_groups.len(), &mut group, &mut is_grouped);
-                    unknowns_groups.push(group);
-                }
-            }
-        }
-        log::trace!("{:?}", is_grouped);
-        Ok(())
+    fn pos_of(&self, status: Status) -> Option<usize> {
+        self.board.iter().position(|status_| status_ == &status)
     }
 
-    fn set_group(&self, idx: usize, id: usize, group: &mut Vec<usize>, is_grouped: &mut Vec<bool>) {
-        if is_grouped[idx] {
+    // no allocation for Vec::new
+    fn evaluate(&self, group: &[usize]) -> (usize, Vec<(usize, usize)>) {
+        if let Some((idx, rest)) = group.split_first() {
+            let mut clf = self.clone();
+            clf.board[*idx] = Status::Flagged;
+            let mut clm = self.clone();
+            clm.board[*idx] = Status::Marked;
+            match (
+                clf.make_consistent(*idx).map(|_| clf.evaluate(rest)),
+                clm.make_consistent(*idx).map(|_| clm.evaluate(rest)),
+            ) {
+                (Ok((a, u)), Ok((b, v))) => {
+                    let mut w = u.into_iter()
+                        .zip(v.into_iter())
+                        .map(|((c, i), (d, i_))| {
+                            debug_assert_eq!(i, i_);
+                            (c + d, i)
+                        })
+                        .collect::<Vec<(usize, usize)>>();
+                    w.push((b, *idx));
+                    (a + b, w)
+                },
+                (Ok((a, mut u)), _) => {
+                    u.push((0, *idx));
+                    (a, u)
+                },
+                (_, Ok((b, mut v))) => {
+                    v.push((b, *idx));
+                    (b, v)
+                },
+                _ => (0, Vec::new())
+            }
+        } else {
+            (1, Vec::new()) 
+        }
+    }
+
+    fn set_group(&self, idx: usize, group: &mut Vec<usize>, assigned: &mut Vec<bool>) {
+        if assigned[idx] {
             return;
         }
-        is_grouped[idx] = true;
+        assigned[idx] = true;
+        if self.board[idx] == Status::Unknown {
+            group.push(idx);
+        }
         match self.board[idx] {
             Status::Known(_) => {
                 for cidx in self.square(idx) {
-                    self.set_group(cidx, id, group, is_grouped);
+                    self.set_group(cidx, group, assigned);
                 }
             },
             Status::Unknown => {
                 for cidx in self.square(idx) {
                     if self.board[cidx] != Status::Unknown {
-                        self.set_group(cidx, id, group, is_grouped);
+                        self.set_group(cidx, group, assigned);
                     }
                 }
             },
@@ -187,49 +216,101 @@ impl MinesweeperState {
         }
     }
 
-    pub fn fast_search(&self) -> Option<(usize, f64)> {
-        if let Some(idx) = self.pos_of(Status::Marked) {
-            Some((idx, 0.0))
-        } else {
-            let center = self.center();
-            match self.board[center] {
-                Status::Known(_) => None,
-                Status::Flagged => unreachable!("Center cannot be bomb"),
-                _ => Some((center, 0.0)),
-            }
+    
+    pub fn center_search(&self) -> Option<ProbWithIndex> {
+        let center = self.center();
+        match self.board[center] {
+            Status::Known(_) => None,
+            Status::Flagged => unreachable!("Center cannot be bomb"),
+            _ => Some((Rational::from_integer(1), center)),
         }
     }
 
-    pub fn slow_search(&self) -> Option<(usize, f64)> {
-        if let Some(idx) = self.pos_of(Status::Marked) {
-            Some((idx, 0.0))
-        } else {
-            let unflags = self.mines() - self.count(Status::Flagged);
-            let unknowns = self.count(Status::Unknown);
-            let base_prob = NotNan::new((unflags as f64) / (unknowns as f64)).ok()?;
-            let mut prob = vec![None; self.size()];
-            for (idx, status) in self.board.iter().enumerate() {
-                if let Status::Known(count) = status {
-                    let square_unknowns = self.square_of(idx, Status::Unknown).count();
-                    let p = NotNan::new((*count as f64) / (square_unknowns as f64)).ok();
-                    for idx_sq in self.square(idx) {
-                        prob[idx_sq] = max(prob[idx_sq], p);
-                    }
+    pub fn fast_search(&self) -> Option<ProbWithIndex> {
+        self
+        .pos_of(Status::Marked)
+        .map(|idx| (Rational::from_integer(1), idx))
+    }
+
+    #[allow(dead_code)]
+    pub fn crude_search(&self) -> Option<ProbWithIndex> {
+        let unknowns = self.count(Status::Unknown);
+        let base = (unknowns != 0).then(|| Rational::new(self.mines() - self.count(Status::Flagged), unknowns))?;
+        let mut compls = vec![None; self.size()];
+        for (idx, status) in self.board.iter().enumerate() {
+            if let Status::Known(count) = status {
+                let square_unknowns = self.square_of(idx, Status::Unknown).count();
+                let compl = (square_unknowns != 0).then(|| Rational::new(*count, square_unknowns));
+                for idx_sq in self.square(idx) {
+                    compls[idx_sq] = max(compls[idx_sq], compl);
                 }
             }
-            self
-            .board
+        }
+        self
+        .board
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, status)| {
+            (status == &Status::Unknown).then(|| (idx, Rational::from_integer(1) - compls[idx].unwrap_or(base)))
+        })
+        .max()
+        .map(|(idx, p)| (p, idx))
+    }
+    
+    pub fn slow_search(&mut self) -> Option<ProbWithIndex> {
+        let mut assigned = self.board
             .iter()
             .enumerate()
-            .filter_map(|(idx, status)| {
-                (status == &Status::Unknown).then(|| (idx, prob[idx].unwrap_or(base_prob)))
+            .map(|(idx, status)| match status {
+                Status::Known(x) => !(x != &0 && self.square_of(idx, Status::Unknown).count() != 0),
+                Status::Unknown => false,
+                _ => true,
             })
-            .min_by_key(|(_, p)| *p)
-            .map(|(idx, p)| (idx, p.into_inner()))
-        }
-    }
-
-    fn pos_of(&self, status: Status) -> Option<usize> {
-        self.board.iter().position(|status_| status_ == &status)
+            .collect::<Vec<bool>>();
+        self.clone().board
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, status)| {
+            (matches!(status, Status::Known(_)) && !assigned[idx]).then(|| {
+                let mut group = Vec::new();
+                self.set_group(idx, &mut group, &mut assigned);
+                log::trace!("{:?}", group.iter().map(|&idx| self.as_rc(idx)).rev().collect::<Vec<_>>());
+                if group.len() <= 16 {
+                    let (max_count, cells) = self.evaluate(&group);
+                    log::trace!("{:?}", cells);
+                    debug_assert_ne!(max_count, 0);
+                    debug_assert_eq!(cells.len(), group.len());
+                    cells
+                    .into_iter()
+                    .map(|(marked_count, idx)| {
+                        if marked_count == 0 {
+                            self.board[idx] = Status::Flagged;
+                        } else if marked_count == max_count {
+                            self.board[idx] = Status::Marked;
+                        }
+                        (Rational::new(marked_count, max_count), idx)
+                    })
+                    .max()
+                } else {
+                    group.
+                    into_iter()
+                    .filter_map(|idx| self
+                        .square(idx)
+                        .filter_map(|cidx| self
+                            .get_known(cidx)
+                            .and_then(|x| {
+                                let flaggeds = self.square_of(cidx, Status::Flagged).count();
+                                let unknowns = self.square_of(cidx, Status::Unknown).count();
+                                (unknowns != 0).then(|| Rational::from_integer(1) - Rational::new(x - flaggeds, unknowns))
+                            })
+                        )
+                        .reduce(|a, b| a * b)
+                        .map(|p| (p, idx))
+                    )
+                    .max()
+                }
+            }).flatten()
+        })
+        .max()
     }
 }

@@ -19,8 +19,6 @@ use thiserror::Error;
 
 #[derive(Clone, Copy, Debug, Error)]
 pub enum MinesweeperError {
-    #[error("AllCellsAreMines")]
-    AllCellsAreMines,
     #[error("NumberOfMinesOutOfRange")]
     NumberOfMinesOutOfRange,
     #[error("RevealedBomb")]

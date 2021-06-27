@@ -17,7 +17,7 @@
 
 use super::*;
 
-fn next_state(state: &MinesweeperState) -> MsResult<MinesweeperState> {
+fn enforce_consistency(state: &MinesweeperState) -> MsResult<MinesweeperState> {
     let mut next = state.clone();
     next.step()?;
     Ok(next)
@@ -30,32 +30,40 @@ pub trait Minesweeper {
     fn flag(&mut self, idx: usize) -> MsResult<()>;
     fn reveal(&mut self, idx: usize) -> MsResult<()>;
     fn set_internal(&mut self, state: MinesweeperState) -> MsResult<()>;
-
-    fn step(&mut self) -> MsResult<Option<(usize, f64)>> {
+    fn flag_all(&mut self, state: &MinesweeperState, next: &MinesweeperState) -> MsResult<()> {
+        let iter = state
+            .board()
+            .iter()
+            .zip(next.board().iter())
+            .enumerate()
+            .filter_map(|(idx, (p, n))| {
+                (p != &Status::Flagged && n == &Status::Flagged)
+                .then(|| idx)
+            });
+        for idx in iter {
+            self.flag(idx)?;
+        }
+        Ok(())
+    }
+    fn step(&mut self) -> MsResult<Option<ProbWithIndex>> {
         let state = self.pull()?;
-        if let Some((idx, p)) = state.fast_search() {
+        if let Some((p, idx)) = state.center_search() {
             self.reveal(idx)?;
-            Ok(Some((idx, p)))
-        } else {
-            let next_state = next_state(&state)?;
-            let info = next_state.slow_search();
-            for idx in state
-                .board()
-                .iter()
-                .zip(next_state.board().iter())
-                .enumerate()
-                .filter_map(|(idx, (prev, next))| {
-                    (prev != &Status::Flagged && next == &Status::Flagged)
-                    .then(|| idx)
-                })
-            {
-                self.flag(idx)?;
-            }
-            self.set_internal(next_state)?;
-            if let Some((idx, _)) = info {
-                self.reveal(idx)?;
-            }
-            Ok(info)
-        }  
+            return Ok(Some((p, idx)));
+        }
+        if let Some((p, idx)) = state.fast_search() {
+            self.reveal(idx)?;
+            return Ok(Some((p, idx)));
+        }
+        let mut next_state = enforce_consistency(&state)?;
+        let info = next_state
+            .fast_search()
+            .or_else(|| next_state.slow_search());
+        self.flag_all(&state, &next_state)?;
+        self.set_internal(next_state)?;
+        if let Some((_, idx)) = info {
+            self.reveal(idx)?;
+        }
+        Ok(info)
     }
 }
