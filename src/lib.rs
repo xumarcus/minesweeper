@@ -32,6 +32,5 @@ use sweep::Minesweeper;
 
 use std::fmt;
 
-use num::rational::Ratio;
-type Rational = Ratio<usize>;
-type ProbWithIndex = (Rational, usize);
+use ordered_float::NotNan;
+type ProbWithIndex = (f64, usize);

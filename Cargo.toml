@@ -8,7 +8,7 @@ edition = "2018"
 
 [dependencies]
 log = "0.4"
-num = "0.4"
+ordered-float = "2.5.1"
 rand = "0.8"
 simple_logger = "1"
 thiserror = "1.0"

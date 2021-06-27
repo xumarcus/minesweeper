@@ -27,9 +27,8 @@ impl<T: Sized + Minesweeper> Solver<T> {
     pub fn solve(&mut self) -> MsResult<()> {
         log::trace!("{}", self);
         while let Some((p, idx)) = self.0.step()? {
-            let percent = (*p.numer() as f64) / (*p.denom() as f64) * 100.0;
             let (row, col) = self.0.get_state().as_rc(idx);
-            log::debug!("Guess ({:02}, {:02}): {:.1}%", row, col, percent);
+            log::debug!("Guess ({:02}, {:02}): {:.1}%", row, col, p * 100.0);
             log::trace!("{}", self);
         }
         Ok(())
