@@ -55,8 +55,14 @@ fn bench_random(diff: Difficulty, b: &mut Bencher) {
     let mut solved = 0;
     let mut n = 0;
     b.iter(|| {
-        let inst = MockMinesweeper::from_difficulty(diff);
-        solved += Solver::new(inst).solve().is_ok() as usize;
+        let inst = MockMinesweeper::from_difficulty(diff, Some(n));
+        match Solver::new(inst).solve() {
+            Err(MinesweeperError::RevealedBomb(_)) => (),
+            Err(x) => unreachable!("{} [Seed {}]", x, n),
+            Ok(()) => {
+                solved += 1;
+            }
+        }
         n += 1;
     });
     let percent = 100.0 * (solved as f64) / (n as f64);

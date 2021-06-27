@@ -19,9 +19,9 @@ use super::*;
 
 use rand::{
     self,
-    SeedableRng,
-    rngs::StdRng,
     distributions::{Distribution, Uniform},
+    rngs::StdRng,
+    SeedableRng,
 };
 
 pub struct MockMinesweeper {
@@ -53,11 +53,11 @@ impl MockMinesweeper {
     }
 
     #[rustfmt::skip]
-    pub fn from_difficulty(diff: Difficulty) -> Self {
+    pub fn from_difficulty(diff: Difficulty, seed: Option<u64>) -> Self {
         let result = match diff {
-            Difficulty::Beginner     => Self::new( 9,  9, 10, None),
-            Difficulty::Intermediate => Self::new(16, 16, 40, None),
-            Difficulty::Expert       => Self::new(30, 16, 99, None),
+            Difficulty::Beginner     => Self::new( 9,  9, 10, seed),
+            Difficulty::Intermediate => Self::new(16, 16, 40, seed),
+            Difficulty::Expert       => Self::new(30, 16, 99, seed),
         };
         result.unwrap()
     }
@@ -87,7 +87,7 @@ impl Minesweeper for MockMinesweeper {
         } else {
             match self.state.board()[idx] {
                 x @ (Status::Flagged | Status::Known(_)) => unreachable!("{}: {:?}", idx, x),
-                _ => self.state.set_known(idx, &self.bombs)
+                _ => self.state.set_known(idx, &self.bombs),
             }
         }
     }

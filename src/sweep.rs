@@ -37,8 +37,7 @@ pub trait Minesweeper {
             .zip(next.board().iter())
             .enumerate()
             .filter_map(|(idx, (p, n))| {
-                (p != &Status::Flagged && n == &Status::Flagged)
-                .then(|| idx)
+                (p != &Status::Flagged && n == &Status::Flagged).then(|| idx)
             });
         for idx in iter {
             self.flag(idx)?;

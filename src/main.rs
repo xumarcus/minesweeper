@@ -29,7 +29,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     logger.init()?;
     
-    let inst = MockMinesweeper::new(16, 16, 40, seed)?;
+    let inst = MockMinesweeper::from_difficulty(Difficulty::Beginner, seed);
     let mut solver = Solver::new(inst);
     let res = solver.solve();
     log::debug!("{}", solver);
