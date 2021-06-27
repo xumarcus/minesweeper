@@ -370,9 +370,6 @@ impl MinesweeperState {
     
     fn probabilistic_search(&self, group: &Vec<Index>, eval: &Evaluation) -> Option<(R64, Index)> {
         let Evaluation { conf_counts, mark_counts } = eval;
-        log::trace!("{:?}", group);
-        log::trace!("{:?}", conf_counts);
-        log::trace!("{:?}", mark_counts);
         let unknowns_otherwise = group.iter().filter(|idx| self.board[**idx] == Status::Unknown).count();
         let unknowns_remaining_in_board = self.count(Status::Unknown) - unknowns_otherwise;
         let flags_remaining_in_board = self.mines() - self.count(Status::Flagged);
