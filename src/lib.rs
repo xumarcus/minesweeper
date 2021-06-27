@@ -32,5 +32,5 @@ use sweep::Minesweeper;
 
 use std::fmt;
 
-use ordered_float::NotNan;
+use noisy_float::prelude::R64;
 type ProbWithIndex = (f64, usize);

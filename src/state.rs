@@ -204,10 +204,11 @@ impl MinesweeperState {
             let unknowns = self.square_of(idx, Status::Unknown).collect::<Vec<Index>>();
             let minimum = self.square_of(idx, Status::Flagged).count();
             let maximum = minimum + unknowns.len();
+            if !(minimum..=maximum).contains(&count) {
+                return Err(MinesweeperError::NumberOfMinesOutOfRange);
+            }
             for cidx in unknowns.iter() {
-                if !(minimum..=maximum).contains(&count) {
-                    return Err(MinesweeperError::NumberOfMinesOutOfRange);
-                } else if count == minimum {
+                if count == minimum {
                     self.board[*cidx] = Status::Marked;
                 } else if count == maximum {
                     self.board[*cidx] = Status::Flagged;
@@ -315,12 +316,12 @@ impl MinesweeperState {
     pub fn crude_search(&self) -> Option<ProbWithIndex> {
         let flags_remaining_in_board = self.mines() - self.count(Status::Flagged);
         let unknowns_remaining_in_board = self.count(Status::Unknown);
-        let base = NotNan::new((flags_remaining_in_board as f64) / (unknowns_remaining_in_board as f64)).ok()?;
+        let base = R64::try_new((flags_remaining_in_board as f64) / (unknowns_remaining_in_board as f64))?;
         let mut compls = vec![None; self.size()];
         for (idx, status) in self.board.iter().enumerate() {
             if let Status::Known(count) = status {
                 let square_unknowns = self.square_of(idx, Status::Unknown).count();
-                let compl = NotNan::new((*count as f64) / (square_unknowns as f64)).ok();
+                let compl = R64::try_new((*count as f64) / (square_unknowns as f64));
                 for idx_sq in self.square(idx) {
                     compls[idx_sq] = max(compls[idx_sq], compl);
                 }
@@ -331,13 +332,13 @@ impl MinesweeperState {
             .enumerate()
             .filter_map(|(idx, status)| {
                 (status == &Status::Unknown)
-                    .then(|| (idx, NotNan::new(1.0).unwrap() - compls[idx].unwrap_or(base)))
+                    .then(|| (idx, R64::try_new(1.0).unwrap() - compls[idx].unwrap_or(base)))
             })
             .max()
-            .map(|(idx, p)| (p.into_inner(), idx))
+            .map(|(idx, p)| (p.raw(), idx))
     }
 
-    fn estimate(&self, group: Vec<Index>) -> Option<(NotNan<f64>, Index)> {
+    fn estimate(&self, group: Vec<Index>) -> Option<(R64, Index)> {
         group
             .into_iter()
             .filter_map(|idx| {
@@ -346,7 +347,7 @@ impl MinesweeperState {
                         self.get_known(cidx).and_then(|x| {
                             let flaggeds = self.square_of(cidx, Status::Flagged).count();
                             let unknowns = self.square_of(cidx, Status::Unknown).count();
-                            NotNan::new(1.0 - ((x - flaggeds) as f64) / (unknowns as f64)).ok()
+                            R64::try_new(1.0 - ((x - flaggeds) as f64) / (unknowns as f64))
                         })
                     })
                     .reduce(|a, b| a * b)
@@ -355,25 +356,26 @@ impl MinesweeperState {
             .max()
     }
 
-    fn brute_force(&mut self, group: Vec<Index>) -> Option<(NotNan<f64>, Index)> {
-        let Evaluation { conf_counts, mark_counts } = self.evaluate(0, &group).expect("Valid assignment exists");
-        let flags_remaining_in_board = self.mines() - self.count(Status::Flagged);
-        let unknowns_otherwise = mark_counts
-            .iter()
-            .enumerate()
-            .filter(|(group_idx, mark_count)| {
-                let cell = &mut self.board[group[*group_idx]];
-                if mark_count.iter().all(|x| x == &0) {
-                    *cell = Status::Flagged;
-                } else if mark_count == &&conf_counts {
-                    *cell = Status::Marked;
-                } else {
-                    return true;
-                }
-                false
-            })
-            .count();
+    fn brute_force(&mut self, group: &Vec<Index>, eval: &Evaluation) {
+        let Evaluation { conf_counts, mark_counts } = eval;
+        for (group_idx, mark_count) in mark_counts.iter().enumerate() {
+            let cell = &mut self.board[group[group_idx]];
+            if mark_count.iter().all(|x| x == &0) {
+                *cell = Status::Flagged;
+            } else if mark_count == conf_counts {
+                *cell = Status::Marked;
+            }
+        }
+    }
+    
+    fn probabilistic_search(&self, group: &Vec<Index>, eval: &Evaluation) -> Option<(R64, Index)> {
+        let Evaluation { conf_counts, mark_counts } = eval;
+        log::trace!("{:?}", group);
+        log::trace!("{:?}", conf_counts);
+        log::trace!("{:?}", mark_counts);
+        let unknowns_otherwise = group.iter().filter(|idx| self.board[**idx] == Status::Unknown).count();
         let unknowns_remaining_in_board = self.count(Status::Unknown) - unknowns_otherwise;
+        let flags_remaining_in_board = self.mines() - self.count(Status::Flagged);
         let base = (flags_remaining_in_board as f64) / (unknowns_remaining_in_board as f64);
         mark_counts
             .iter()
@@ -392,9 +394,9 @@ impl MinesweeperState {
                         * ncr(unknowns_otherwise, i)
                         * base.powi(i as i32)
                         * (1.0 - base).powi((unknowns_otherwise - i) as i32);
-                    NotNan::new(p).ok()
+                    R64::try_new(p)
                 })
-                .sum::<NotNan<f64>>();
+                .sum::<R64>();
                 (mark_prob, idx)
 
             })
@@ -423,7 +425,11 @@ impl MinesweeperState {
                         let mut group = Vec::new();
                         self.set_group(idx, &mut group, &mut assigned);
                         if group.len() <= 32 {
-                            self.backtrack(group)
+                            let eval = self.evaluate(0, &group).expect("Valid assignment exists");
+                            self.brute_force(&group, &eval);
+                            self.fast_search()
+                                .map(|(p, idx)| (R64::try_new(p).unwrap(), idx))
+                                .or_else(|| self.probabilistic_search(&group, &eval))
                         } else {
                             self.estimate(group)
                         }
@@ -438,7 +444,7 @@ impl MinesweeperState {
                 (!is_assigned && self.board[idx] == Status::Unknown).then(|| idx)
             })
             .next();
-        let base = NotNan::new(0f64).unwrap(); // NotNan::new((self.mines() as f64) / (self.count(Status::Unknown) as f64)).unwrap();
-        max(best, ridx.map(|idx| (base, idx))).map(|(p, idx)| (p.into_inner(), idx))
+        let base = R64::try_new(0f64).unwrap(); // R64::try_new((self.mines() as f64) / (self.count(Status::Unknown) as f64)).unwrap();
+        max(best, ridx.map(|idx| (base, idx))).map(|(p, idx)| (p.raw(), idx))
     }
 }

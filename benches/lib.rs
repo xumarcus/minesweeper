@@ -74,11 +74,14 @@ fn bench_random(diff: Difficulty, b: &mut Bencher) {
     let mut n = 0;
     b.iter(|| {
         let inst = MockMinesweeper::from_difficulty(diff, Some(n));
-        match Solver::new(inst).solve() {
-            Err(MinesweeperError::RevealedBomb(_)) => (),
-            Err(x) => unreachable!("{} [Seed {}]", x, n),
-            Ok(()) => {
-                solved += 1;
+        match std::panic::catch_unwind(|| Solver::new(inst).solve()) {
+            Err(x) => unreachable!("Panicked [Seed {}]", n),
+            Ok(res) => match res {
+                Err(MinesweeperError::RevealedBomb(_)) => (),
+                Err(x) => unreachable!("{} [Seed {}]", x, n),
+                Ok(()) => {
+                    solved += 1;
+                }
             }
         }
         n += 1;
