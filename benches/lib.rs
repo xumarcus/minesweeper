@@ -95,6 +95,15 @@ Expert 23.0% (207 / 901)
 test bench_random_expert       ... bench:   8,335,486 ns/iter (+/- 76,189,221)
 */
 
+/* Iteration 7
+Beginner 76.6% (1839 / 2401)
+test bench_random_beginner     ... bench:     879,753 ns/iter (+/- 2,416,856)
+Intermediate 60.7% (1639 / 2701)
+test bench_random_intermediate ... bench:   2,608,713 ns/iter (+/- 9,687,387)
+Expert 26.9% (81 / 301)
+test bench_random_expert       ... bench:   5,114,330 ns/iter (+/- 91,891,735)
+*/
+
 // cargo +nightly bench -- --nocapture
 fn bench_random(diff: Difficulty, b: &mut Bencher) {
     let mut solved = 0;

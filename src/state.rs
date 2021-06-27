@@ -314,9 +314,9 @@ impl MinesweeperState {
 
     #[allow(dead_code)]
     pub fn crude_search(&self) -> Option<ProbWithIndex> {
-        let flags_remaining_in_board = self.mines() - self.count(Status::Flagged);
-        let unknowns_remaining_in_board = self.count(Status::Unknown);
-        let base = R64::try_new((flags_remaining_in_board as f64) / (unknowns_remaining_in_board as f64))?;
+        let flags = self.mines() - self.count(Status::Flagged);
+        let unknowns = self.count(Status::Unknown);
+        let base = R64::try_new((flags as f64) / (unknowns as f64))?;
         let mut compls = vec![None; self.size()];
         for (idx, status) in self.board.iter().enumerate() {
             if let Status::Known(count) = status {
@@ -371,9 +371,10 @@ impl MinesweeperState {
     fn probabilistic_search(&self, group: &Vec<Index>, eval: &Evaluation) -> Option<(R64, Index)> {
         let Evaluation { conf_counts, mark_counts } = eval;
         let unknowns_otherwise = group.iter().filter(|idx| self.board[**idx] == Status::Unknown).count();
-        let unknowns_remaining_in_board = self.count(Status::Unknown) - unknowns_otherwise;
-        let flags_remaining_in_board = self.mines() - self.count(Status::Flagged);
-        let base = (flags_remaining_in_board as f64) / (unknowns_remaining_in_board as f64);
+        let unknowns = self.count(Status::Unknown);
+        let flags = self.mines() - self.count(Status::Flagged);
+        let base = (flags as f64) / (unknowns as f64);
+        debug_assert!(0.0 <= base && base <= 1.0);
         mark_counts
             .iter()
             .enumerate()
@@ -441,6 +442,11 @@ impl MinesweeperState {
                 (!is_assigned && self.board[idx] == Status::Unknown).then(|| idx)
             })
             .collect::<Vec<Index>>();
-        let flags_remaining_in_board = self.mines() - self.count(Status::Flagged); // @todo
-        let base = R64::try_new((flags_remaining_in_board as f64) / (unknowns_unassigned.len() as f64));
-        max(best, unknowns_unassigned.first().and_then(|idx| Some((base?, *idx)))).map(|(p, idx)| (p.raw(),
+        /* @todo
+        let flags = self.mines() - self.count(Status::Flagged);
+        let base = R64::try_new((flags as f64) / (unknowns_unassigned.len() as f64));
+        max(best, unknowns_unassigned.first().map(|idx| (base, *idx))).map(|(p, idx)| (p.raw(), idx))
+        */
+        max(best, self.estimate(unknowns_unassigned)).map(|(p, idx)| (p.raw(), idx))
+    }
+}

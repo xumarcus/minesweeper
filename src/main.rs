@@ -22,14 +22,22 @@ use std::env;
 use simple_logger::SimpleLogger;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let seed = env::args().nth(1).and_then(|s| s.parse::<u64>().ok());
+
+    let diff = match env::args().nth(1).as_deref() {
+        Some("beginner") => Difficulty::Beginner,
+        Some("intermediate") => Difficulty::Intermediate,
+        Some("expert") => Difficulty::Expert,
+        _ => Difficulty::Beginner
+    };
+
+    let seed = env::args().nth(2).and_then(|s| s.parse::<u64>().ok());
     let logger = match seed {
         None => SimpleLogger::new().with_level(log::LevelFilter::Debug),
         _ => SimpleLogger::new()
     };
     logger.init()?;
     
-    let inst = MockMinesweeper::from_difficulty(Difficulty::Expert, seed);
+    let inst = MockMinesweeper::from_difficulty(diff, seed);
     let mut solver = Solver::new(inst);
     let res = solver.solve();
     log::info!("{}", solver);
