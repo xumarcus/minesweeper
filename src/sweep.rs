@@ -60,8 +60,12 @@ pub trait Minesweeper {
             .or_else(|| next_state.slow_search());
         self.flag_all(&state, &next_state)?;
         self.set_internal(next_state)?;
-        if let Some((_, idx)) = info {
-            self.reveal(idx)?;
+        if let Some((p, idx)) = info {
+            self.reveal(idx).map_err(|e| {
+                let (row, col) = state.as_rc(idx);
+                log::info!("Wrong ({:02}, {:02}): {:.1}%", row, col, p * 100.0);
+                e
+            })?;
         }
         Ok(info)
     }

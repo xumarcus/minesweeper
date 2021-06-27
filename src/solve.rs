@@ -25,13 +25,21 @@ impl<T: Sized + Minesweeper> Solver<T> {
     }
 
     pub fn solve(&mut self) -> MsResult<()> {
-        log::trace!("{}", self);
-        while let Some((p, idx)) = self.0.step()? {
-            let (row, col) = self.0.get_state().as_rc(idx);
-            log::debug!("Guess ({:02}, {:02}): {:.1}%", row, col, p * 100.0);
-            log::trace!("{}", self);
+        let length = self.0.get_state().length();
+        for x in self {
+            let (p, idx) = x?;
+            let row = idx / length;
+            let col = idx % length;
+            log::info!("Guess ({:02}, {:02}): {:.1}%", row, col, p * 100.0);
         }
         Ok(())
+    }
+}
+
+impl<T: Sized + Minesweeper> Iterator for Solver<T> {
+    type Item = MsResult<ProbWithIndex>;
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.step().transpose()
     }
 }
 

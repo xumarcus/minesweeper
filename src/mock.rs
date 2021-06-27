@@ -57,7 +57,7 @@ impl MockMinesweeper {
         let result = match diff {
             Difficulty::Beginner     => Self::new( 9,  9, 10, seed),
             Difficulty::Intermediate => Self::new(16, 16, 40, seed),
-            Difficulty::Expert       => Self::new(30, 16, 99, seed),
+            Difficulty::Expert       => Self::new(16, 30, 99, seed),
         };
         result.unwrap()
     }

@@ -68,6 +68,33 @@ Expert 11.0% (232 / 2101)
 test bench_random_expert       ... bench:   2,007,857 ns/iter (+/- 3,321,719)
 */
 
+/* Iteration 5a (Backtrack threshold = 32)
+Beginner 74.3% (2231 / 3001)
+test bench_random_beginner     ... bench:     761,175 ns/iter (+/- 1,273,958)
+Intermediate 57.2% (2231 / 3901)
+test bench_random_intermediate ... bench:   2,978,890 ns/iter (+/- 3,990,878)
+Expert 19.4% (175 / 901)
+test bench_random_expert       ... bench:   8,174,460 ns/iter (+/- 27,425,363)
+*/
+
+/* Iteration 5b (Backtrack threshold = 64)
+Beginner 74.0% (1998 / 2701)
+test bench_random_beginner     ... bench:     753,587 ns/iter (+/- 1,301,422)
+Intermediate 57.6% (1556 / 2701)
+test bench_random_intermediate ... bench:   2,707,823 ns/iter (+/- 11,399,150)
+Expert 21.9% (66 / 301)
+test bench_random_expert       ... bench:   7,200,480 ns/iter (+/- 118,105,798)
+*/
+
+/* Iteration 6
+Beginner 77.0% (2312 / 3001)
+test bench_random_beginner     ... bench:     729,070 ns/iter (+/- 1,257,049)
+Intermediate 59.8% (2155 / 3601)
+test bench_random_intermediate ... bench:   2,183,839 ns/iter (+/- 7,182,664)
+Expert 23.0% (207 / 901)
+test bench_random_expert       ... bench:   8,335,486 ns/iter (+/- 76,189,221)
+*/
+
 // cargo +nightly bench -- --nocapture
 fn bench_random(diff: Difficulty, b: &mut Bencher) {
     let mut solved = 0;
@@ -75,7 +102,7 @@ fn bench_random(diff: Difficulty, b: &mut Bencher) {
     b.iter(|| {
         let inst = MockMinesweeper::from_difficulty(diff, Some(n));
         match std::panic::catch_unwind(|| Solver::new(inst).solve()) {
-            Err(x) => unreachable!("Panicked [Seed {}]", n),
+            Err(_) => unreachable!("Panicked [Seed {}]", n),
             Ok(res) => match res {
                 Err(MinesweeperError::RevealedBomb(_)) => (),
                 Err(x) => unreachable!("{} [Seed {}]", x, n),

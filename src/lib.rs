@@ -25,7 +25,7 @@ mod solve;
 pub use solve::Solver;
 
 mod state;
-pub use state::{MinesweeperState, ShowState};
+use state::{MinesweeperState, ShowState};
 
 mod sweep;
 use sweep::Minesweeper;

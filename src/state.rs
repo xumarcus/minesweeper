@@ -421,7 +421,7 @@ impl MinesweeperState {
                     .then(|| {
                         let mut group = Vec::new();
                         self.set_group(idx, &mut group, &mut assigned);
-                        if group.len() <= 32 {
+                        if group.len() <= 64 {
                             let eval = self.evaluate(0, &group).expect("Valid assignment exists");
                             self.brute_force(&group, &eval);
                             self.fast_search()
@@ -434,14 +434,13 @@ impl MinesweeperState {
                     .flatten()
             })
             .max();
-        let ridx = assigned
+        let unknowns_unassigned = assigned
             .iter()
             .enumerate()
             .filter_map(|(idx, is_assigned)| {
                 (!is_assigned && self.board[idx] == Status::Unknown).then(|| idx)
             })
-            .next();
-        let base = R64::try_new(0f64).unwrap(); // R64::try_new((self.mines() as f64) / (self.count(Status::Unknown) as f64)).unwrap();
-        max(best, ridx.map(|idx| (base, idx))).map(|(p, idx)| (p.raw(), idx))
-    }
-}
+            .collect::<Vec<Index>>();
+        let flags_remaining_in_board = self.mines() - self.count(Status::Flagged); // @todo
+        let base = R64::try_new((flags_remaining_in_board as f64) / (unknowns_unassigned.len() as f64));
+        max(best, unknowns_unassigned.first().and_then(|idx| Some((base?, *idx)))).map(|(p, idx)| (p.raw(),
