@@ -397,7 +397,7 @@ impl MinesweeperState {
                     .then(|| {
                         let mut group = Vec::new();
                         self.set_group(idx, &mut group, &mut assigned);
-                        if group.len() <= 16 {
+                        if group.len() <= 32 {
                             self.backtrack(group)
                         } else {
                             self.estimate(group)

@@ -50,6 +50,24 @@ Expert 1.3% (241 / 18901)
 test bench_random_expert       ... bench:     284,593 ns/iter (+/- 78,911)
 */
 
+/* Iteration 4a (Backtrack threshold = 16)
+Beginner 63.6% (17377 / 27301)
+test bench_random_beginner     ... bench:     187,178 ns/iter (+/- 57,746)
+Intermediate 42.8% (4241 / 9901)
+test bench_random_intermediate ... bench:     427,265 ns/iter (+/- 138,339)
+Expert 4.5% (204 / 4501)
+test bench_random_expert       ... bench:     798,028 ns/iter (+/- 376,861)
+*/
+
+/* Iteration 4b (Backtrack threshold = 32)
+Beginner 63.6% (17354 / 27301)
+test bench_random_beginner     ... bench:     212,455 ns/iter (+/- 77,739)
+Intermediate 47.1% (6364 / 13501)
+test bench_random_intermediate ... bench:     600,766 ns/iter (+/- 410,004)
+Expert 11.0% (232 / 2101)
+test bench_random_expert       ... bench:   2,007,857 ns/iter (+/- 3,321,719)
+*/
+
 // cargo +nightly bench -- --nocapture
 fn bench_random(diff: Difficulty, b: &mut Bencher) {
     let mut solved = 0;
