@@ -339,6 +339,43 @@ impl MinesweeperState {
             .map(|(idx, p)| (p, idx))
     }
 
+    fn estimate(&self, group: Vec<usize>) -> Option<ProbWithIndex> {
+        group
+            .into_iter()
+            .filter_map(|idx| {
+                self.square(idx)
+                    .filter_map(|cidx| {
+                        self.get_known(cidx).and_then(|x| {
+                            let flaggeds = self.square_of(cidx, Status::Flagged).count();
+                            let unknowns = self.square_of(cidx, Status::Unknown).count();
+                            (unknowns != 0).then(|| {
+                                Rational::from_integer(1) - Rational::new(x - flaggeds, unknowns)
+                            })
+                        })
+                    })
+                    .reduce(|a, b| a * b)
+                    .map(|p| (p, idx))
+            })
+            .max()
+    }
+
+    fn backtrack(&mut self, group: Vec<usize>) -> Option<ProbWithIndex> {
+        let (max_count, cells) = self.evaluate(&group).expect("Valid assignment exists");
+        debug_assert_ne!(max_count, 0);
+        debug_assert_eq!(cells.len(), group.len());
+        cells
+            .into_iter()
+            .map(|(marked_count, idx)| {
+                if marked_count == 0 {
+                    self.board[idx] = Status::Flagged;
+                } else if marked_count == max_count {
+                    self.board[idx] = Status::Marked;
+                }
+                (Rational::new(marked_count, max_count), idx)
+            })
+            .max()
+    }
+
     pub fn slow_search(&mut self) -> Option<ProbWithIndex> {
         let mut assigned = self
             .board
@@ -350,7 +387,8 @@ impl MinesweeperState {
                 _ => true,
             })
             .collect::<Vec<bool>>();
-        self.clone()
+        let best = self
+            .clone()
             .board
             .iter()
             .enumerate()
@@ -360,46 +398,23 @@ impl MinesweeperState {
                         let mut group = Vec::new();
                         self.set_group(idx, &mut group, &mut assigned);
                         if group.len() <= 16 {
-                            let (max_count, cells) =
-                                self.evaluate(&group).expect("Valid assignment exists");
-                            debug_assert_ne!(max_count, 0);
-                            debug_assert_eq!(cells.len(), group.len());
-                            cells
-                                .into_iter()
-                                .map(|(marked_count, idx)| {
-                                    if marked_count == 0 {
-                                        self.board[idx] = Status::Flagged;
-                                    } else if marked_count == max_count {
-                                        self.board[idx] = Status::Marked;
-                                    }
-                                    (Rational::new(marked_count, max_count), idx)
-                                })
-                                .max()
+                            self.backtrack(group)
                         } else {
-                            group
-                                .into_iter()
-                                .filter_map(|idx| {
-                                    self.square(idx)
-                                        .filter_map(|cidx| {
-                                            self.get_known(cidx).and_then(|x| {
-                                                let flaggeds =
-                                                    self.square_of(cidx, Status::Flagged).count();
-                                                let unknowns =
-                                                    self.square_of(cidx, Status::Unknown).count();
-                                                (unknowns != 0).then(|| {
-                                                    Rational::from_integer(1)
-                                                        - Rational::new(x - flaggeds, unknowns)
-                                                })
-                                            })
-                                        })
-                                        .reduce(|a, b| a * b)
-                                        .map(|p| (p, idx))
-                                })
-                                .max()
+                            self.estimate(group)
                         }
                     })
                     .flatten()
             })
-            .max()
+            .max();
+
+        let ridx = assigned
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, is_assigned)| {
+                (!is_assigned && self.board[idx] == Status::Unknown).then(|| idx)
+            })
+            .next();
+        let base = Rational::new_raw(self.mines(), self.count(Status::Unknown));
+        max(best, ridx.map(|idx| (base, idx)))
     }
 }
