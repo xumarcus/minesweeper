@@ -9,6 +9,7 @@ edition = "2018"
 [dependencies]
 log = "0.4"
 noisy_float = "0.2"
+probability = "0.17.0"
 rand = "0.8"
 simple_logger = "1"
 smallvec = "1.6.1"

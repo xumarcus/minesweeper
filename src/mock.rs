@@ -83,8 +83,8 @@ impl Minesweeper for MockMinesweeper {
 
     fn reveal(&mut self, idx: usize) -> MsResult<()> {
         (!self.bombs[idx])
-        .then(|| self.state.set_known(idx, &self.bombs))
-        .ok_or(MinesweeperError::RevealedBomb(idx))
+            .then(|| self.state.set_known(idx, &self.bombs))
+            .ok_or(MinesweeperError::RevealedBomb(idx))
     }
 
     fn set_internal(&mut self, state: MinesweeperState) -> MsResult<()> {

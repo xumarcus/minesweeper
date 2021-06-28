@@ -31,7 +31,10 @@ impl<T: Sized + Minesweeper> Solver<T> {
             log::trace!("{}", self);
             drop(x?);
         }
-        Ok(())
+        let unknowns = self.0.get_state().unknowns();
+        (unknowns == 0)
+            .then(|| ())
+            .ok_or(MinesweeperError::SolverEarlyExit(unknowns))
     }
 }
 

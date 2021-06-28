@@ -25,6 +25,8 @@ pub enum MinesweeperError {
     NumberOfMinesOutOfRange,
     #[error("RevealedBomb")]
     RevealedBomb(usize),
+    #[error("SolverEarlyExit")]
+    SolverEarlyExit(usize),
 }
 
 pub type MsResult<T> = Result<T, MinesweeperError>;

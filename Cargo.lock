@@ -96,6 +96,7 @@ version = "0.1.0"
 dependencies = [
  "log",
  "noisy_float",
+ "probability",
  "rand",
  "simple_logger",
  "smallvec",
@@ -135,6 +136,16 @@ name = "ppv-lite86"
 version = "0.2.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ac74c624d6b2d21f425f752262f42188365d7b8ff1aff74c82e45136510a4857"
+
+[[package]]
+name = "probability"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "01935a29f0dd293b7d0254144168084cc8ada317b107635c777fb7d0fb5120e5"
+dependencies = [
+ "random",
+ "special",
+]
 
 [[package]]
 name = "proc-macro2"
@@ -195,6 +206,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "random"
+version = "0.12.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "97d13a3485349981c90c79112a11222c3e6e75de1d52b87a7525b3bf5361420f"
+
+[[package]]
 name = "simple_logger"
 version = "1.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -212,6 +229,15 @@ name = "smallvec"
 version = "1.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fe0f37c9e8f3c5a4a66ad655a93c74daac4ad00c441533bf5c6e7990bb42604e"
+
+[[package]]
+name = "special"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "24a65e074159b75dcf173a4733ab2188baac24967b5c8ec9ed87ae15fcbc7636"
+dependencies = [
+ "libc",
+]
 
 [[package]]
 name = "syn"

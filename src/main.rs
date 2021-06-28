@@ -22,7 +22,6 @@ use std::env;
 use simple_logger::SimpleLogger;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-
     let diff = match env::args().nth(1).as_deref() {
         Some("beginner") => Difficulty::Beginner,
         Some("intermediate") => Difficulty::Intermediate,
@@ -43,3 +42,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     log::info!("{}", solver);
     res.map_err(From::from)
 }
+
+/*
+fn main() {
+    for _ in 0..2000 {
+        let inst = MockMinesweeper::from_difficulty(Difficulty::Expert, None);
+        Solver::new(inst).solve();
+    }
+}
+*/

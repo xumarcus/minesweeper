@@ -40,9 +40,11 @@ mod util;
 
 use noisy_float::prelude::R64;
 
+use probability::distribution::{Binomial, Discrete};
+
 use smallvec::{smallvec, SmallVec};
 
-const GROUP_SIZE: usize = 16;
+const GROUP_SIZE: usize = 32;
 
 type Index = usize;
 type Group<T> = SmallVec<[T; GROUP_SIZE]>;
