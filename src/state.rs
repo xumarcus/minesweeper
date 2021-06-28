@@ -142,7 +142,7 @@ impl MinesweeperState {
         let rmin = max(1, row) - 1;
         let rmax = min(self.width - 1, row + 1);
         let cmin = max(1, col) - 1;
-        let cmax = max(self.length - 1, col + 1);
+        let cmax = min(self.length - 1, col + 1);
         (rmin..=rmax).flat_map(|r| (cmin..=cmax).map(move |c| self.from_rc(r, c))).filter(|cidx| cidx != &idx).collect()
     }
 
@@ -196,17 +196,18 @@ impl MinesweeperState {
         Ok(())
     }
 
-    fn evaluate(&mut self, subgroup: &[usize], group: &[usize]) -> Option<Evaluation> {
-        if let Some((idx, rest)) = subgroup.split_first() {
+    fn evaluate(&mut self, group_idx: usize, group: &[usize]) -> Option<Evaluation> {
+        if let Some(idx) = group.get(group_idx) {
+            let succ = group_idx + 1;
             match self.board[*idx] {
-                Status::Flagged | Status::Marked => self.evaluate(rest, group),
+                Status::Flagged | Status::Marked => self.evaluate(succ, group),
                 Status::Known(_) => unreachable!(),
                 Status::Unknown => {
                     let mut selm = self.clone();
                     self.set_flag(*idx);
                     selm.set_mark(*idx);
-                    let self_eval = self.make_consistent_sq(*idx).ok().and_then(|_| self.evaluate(rest, group));
-                    let selm_eval = selm.make_consistent_sq(*idx).ok().and_then(|_| selm.evaluate(rest, group));
+                    let self_eval = self.make_consistent_sq(*idx).ok().and_then(|_| self.evaluate(succ, group));
+                    let selm_eval = selm.make_consistent_sq(*idx).ok().and_then(|_| selm.evaluate(succ, group));
                     util::lift(self_eval, selm_eval, Evaluation::add)
                 }
             }
@@ -376,7 +377,7 @@ impl MinesweeperState {
                         let mut group = Vec::new();
                         self.set_group(idx, &mut group, &mut assigned);
                         if group.len() <= 64 {
-                            let eval = self.clone().evaluate(&group, &group).expect("Valid assignment exists");
+                            let eval = self.clone().evaluate(0, &group).expect("Valid assignment exists");
                             self.brute_force(&group, &eval);
                             self.fast_search()
                                 .or_else(|| self.probabilistic_search(&group, &eval))

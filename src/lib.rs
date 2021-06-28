@@ -42,7 +42,7 @@ use noisy_float::prelude::R64;
 
 use smallvec::{smallvec, SmallVec};
 
-const GROUP_SIZE: usize = 64;
+const GROUP_SIZE: usize = 16;
 
 type Index = usize;
 type Group<T> = SmallVec<[T; GROUP_SIZE]>;
