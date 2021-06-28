@@ -20,7 +20,12 @@
 extern crate test;
 use test::Bencher;
 
-use minesweeper::*;
+/* To run benches, run
+
+rustup toolchain install nightly
+cargo +nightly bench -- --nocapture
+
+*/
 
 /* Iteration 1 (Naive)
 running 3 tests
@@ -104,17 +109,24 @@ Expert 26.9% (81 / 301)
 test bench_random_expert       ... bench:   5,114,330 ns/iter (+/- 91,891,735)
 */
 
-// cargo +nightly bench -- --nocapture
+use minesweeper::*;
+
+use rand::{self, distributions::{Distribution, Uniform}};
+
 fn bench_random(diff: Difficulty, b: &mut Bencher) {
-    let mut solved = 0;
+    let between = Uniform::from(0..u64::MAX / 2);
+    let mut rng = rand::thread_rng();
+    let initial_seed = between.sample(&mut rng);
     let mut n = 0;
+    let mut solved = 0;
     b.iter(|| {
-        let inst = MockMinesweeper::from_difficulty(diff, Some(n));
+        let seed = initial_seed + n;
+        let inst = MockMinesweeper::from_difficulty(diff, Some(seed));
         match std::panic::catch_unwind(|| Solver::new(inst).solve()) {
-            Err(_) => unreachable!("Panicked [Seed {}]", n),
+            Err(_) => unreachable!("Panicked [Seed {}]", seed),
             Ok(res) => match res {
                 Err(MinesweeperError::RevealedBomb(_)) => (),
-                Err(x) => unreachable!("{} [Seed {}]", x, n),
+                Err(x) => unreachable!("{} [Seed {}]", x, seed),
                 Ok(()) => {
                     solved += 1;
                 }
