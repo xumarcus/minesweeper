@@ -27,12 +27,9 @@ impl<T: Sized + Minesweeper> Solver<T> {
     }
 
     pub fn solve(&mut self) -> MsResult<()> {
-        let length = self.0.get_state().length();
-        for x in self {
-            let (p, idx) = x?;
-            let row = idx / length;
-            let col = idx % length;
-            log::info!("Guess ({:02}, {:02}): {:.1}%", row, col, p * 100.0);
+        while let Some(x) = self.next() {
+            log::trace!("{}", self);
+            drop(x?);
         }
         Ok(())
     }

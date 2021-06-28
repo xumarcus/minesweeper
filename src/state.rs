@@ -27,7 +27,7 @@ pub struct MinesweeperState {
     length: usize,
     mines: usize,
     flags: usize,
-    marks: usize,
+    unknowns: usize,
     knowns: usize,
 }
 
@@ -41,7 +41,7 @@ impl MinesweeperState {
         (width * length > mines)
             .then(|| {
                 let board = vec![Status::Unknown; width * length];
-                Self { board, width, length, mines, flags: 0, marks: 0, knowns: 0, }
+                Self { board, width, length, mines, flags: 0, unknowns: width * length, knowns: 0, }
             })
             .ok_or(MinesweeperError::NumberOfMinesOutOfRange)
     }
@@ -78,7 +78,7 @@ impl MinesweeperState {
 
     #[inline]
     pub fn marks(&self) -> usize {
-        self.marks
+        self.size() - self.flags() - self.unknowns() - self.knowns()
     }
 
     #[inline]
@@ -88,7 +88,7 @@ impl MinesweeperState {
 
     #[inline]
     pub fn unknowns(&self) -> usize {
-        self.size() - self.flags() - self.marks() - self.knowns()
+        self.unknowns
     }
 
     #[inline]
@@ -110,6 +110,7 @@ impl MinesweeperState {
     fn set_flag(&mut self, idx: Index) {
         debug_assert_eq!(self.board[idx], Status::Unknown);
         self.board[idx] = Status::Flagged;
+        self.unknowns -= 1;
         self.flags += 1;
     }
 
@@ -117,7 +118,7 @@ impl MinesweeperState {
     fn set_mark(&mut self, idx: Index) {
         debug_assert_eq!(self.board[idx], Status::Unknown);
         self.board[idx] = Status::Marked;
-        self.marks += 1;
+        self.unknowns -= 1;
     }
 
     pub fn set_known(&mut self, idx: Index, bombs: &Vec<bool>) {
@@ -126,6 +127,9 @@ impl MinesweeperState {
             let square = self.square(idx); 
             let count = square.iter().filter(|&&cidx| bombs[cidx]).count();
             self.board[idx] = Status::Known(count);
+            if self.board[idx] == Status::Unknown {
+                self.unknowns -= 1;
+            }
             self.knowns += 1;
             if count == 0 {
                 for cidx in square {
@@ -223,7 +227,7 @@ impl MinesweeperState {
         }
     }
 
-    fn set_group(&self, idx: Index, group: &mut Vec<Index>, assigned: &mut Vec<bool>) {
+    fn set_group(&self, idx: Index, group: &mut Group<Index>, assigned: &mut Vec<bool>) {
         if assigned[idx] {
             return;
         }
@@ -252,16 +256,14 @@ impl MinesweeperState {
         let center = self.center();
         match self.board[center] {
             Status::Known(_) => None,
-            Status::Flagged => unreachable!(),
+            Status::Flagged | Status::Marked => unreachable!(),
             _ => Some((R64::new(1.0), center)),
         }
     }
 
-    pub fn fast_search(&self) -> Option<ScoredUnknown> {
-        self.board
-            .iter()
-            .position(|status| status == &Status::Marked)
-            .map(|idx| (R64::new(1.0), idx))
+    pub fn fast_search(&mut self) -> Option<ScoredUnknown> {
+        let idx = self.board .iter() .position(|status| status == &Status::Marked)?;
+        Some((R64::new(1.0), idx))
     }
 
     #[allow(dead_code)]
@@ -309,19 +311,19 @@ impl MinesweeperState {
             .max()
     }
 
-    fn brute_force(&mut self, group: &Vec<Index>, eval: &Evaluation) {
+    fn brute_force(&mut self, group: &Group<Index>, eval: &Evaluation) {
         let Evaluation { conf_counts, mark_counts } = eval;
         for (group_idx, mark_count) in mark_counts.iter().enumerate() {
-            let cell = &mut self.board[group[group_idx]];
+            let idx = group[group_idx];
             if mark_count.iter().all(|x| x == &0) {
-                *cell = Status::Flagged;
+                self.set_flag(idx);
             } else if mark_count == conf_counts {
-                *cell = Status::Marked;
+                self.set_mark(idx);
             }
         }
     }
     
-    fn probabilistic_search(&self, group: &Vec<Index>, eval: &Evaluation) -> Option<(R64, Index)> {
+    fn probabilistic_search(&self, group: &Group<Index>, eval: &Evaluation) -> Option<(R64, Index)> {
         let Evaluation { conf_counts, mark_counts } = eval;
         let unknowns_otherwise = group.iter().filter(|idx| self.board[**idx] == Status::Unknown).count();
         let base = ((self.mines() - self.flags()) as f64) / (self.unknowns() as f64);
@@ -374,15 +376,15 @@ impl MinesweeperState {
             .filter_map(|(idx, status)| {
                 (matches!(status, Status::Known(_)) && !assigned[idx])
                     .then(|| {
-                        let mut group = Vec::new();
+                        let mut group = SmallVec::new();
                         self.set_group(idx, &mut group, &mut assigned);
-                        if group.len() <= 64 {
+                        if group.spilled() {
+                            self.estimate(group.into_vec()) // No reallocation
+                        } else {
                             let eval = self.clone().evaluate(0, &group).expect("Valid assignment exists");
                             self.brute_force(&group, &eval);
                             self.fast_search()
                                 .or_else(|| self.probabilistic_search(&group, &eval))
-                        } else {
-                            self.estimate(group)
                         }
                     })
                     .flatten()
