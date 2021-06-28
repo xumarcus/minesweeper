@@ -82,14 +82,9 @@ impl Minesweeper for MockMinesweeper {
     }
 
     fn reveal(&mut self, idx: usize) -> MsResult<()> {
-        if self.bombs[idx] {
-            Err(MinesweeperError::RevealedBomb(idx))
-        } else {
-            match self.state.board()[idx] {
-                x @ (Status::Flagged | Status::Known(_)) => unreachable!("{}: {:?}", idx, x),
-                _ => self.state.set_known(idx, &self.bombs),
-            }
-        }
+        (!self.bombs[idx])
+        .then(|| self.state.set_known(idx, &self.bombs))
+        .ok_or(MinesweeperError::RevealedBomb(idx))
     }
 
     fn set_internal(&mut self, state: MinesweeperState) -> MsResult<()> {

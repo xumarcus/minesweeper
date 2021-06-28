@@ -1,50 +1,44 @@
 // Copyright (C) 2021 Marcus Xu
-//
+// 
 // This file is part of minesweeper.
-//
+// 
 // minesweeper is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
-//
+// 
 // minesweeper is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
-//
+// 
 // You should have received a copy of the GNU General Public License
 // along with minesweeper.  If not, see <http://www.gnu.org/licenses/>.
 
-mod enums;
-pub use enums::*;
+use super::*;
 
-mod eval;
-use eval::Evaluation;
+use std::ops::Add;
 
-mod mock;
-pub use mock::MockMinesweeper;
+fn zip_with<T, U, F: Fn(T, T) -> U>(a: Group<T>, b: Group<T>, f: F) -> Group<U> {
+    a.into_iter().zip(b.into_iter()).map(|(x, y)| f(x, y)).collect()
+}
 
-mod solve;
-pub use solve::Solver;
+fn add_with<T: Add>(a: Group<T>, b: Group<T>) -> Group<<T as std::ops::Add>::Output> {
+    zip_with(a, b, T::add)
+}
 
-mod showstate;
-use showstate::ShowState;
+pub struct Evaluation {
+    pub conf_counts: Group<usize>,
+    pub mark_counts: Group<Group<usize>>,
+}
 
-mod state;
-use state::MinesweeperState;
+impl Add for Evaluation {
+    type Output = Self;
 
-mod sweep;
-use sweep::Minesweeper;
-
-mod util;
-
-use noisy_float::prelude::R64;
-
-use smallvec::{smallvec, SmallVec};
-
-const GROUP_SIZE: usize = 64;
-
-type Index = usize;
-type Group<T> = SmallVec<[T; GROUP_SIZE]>;
-type ScoredUnknown = (R64, usize);
-type Square = SmallVec<[Index; 8]>;
+    fn add(self, other: Self) -> Self {
+        Evaluation {
+            conf_counts: add_with(self.conf_counts, other.conf_counts),
+            mark_counts: zip_with(self.mark_counts, other.mark_counts, add_with),
+        }
+    }
+}

@@ -17,6 +17,8 @@
 
 use super::*;
 
+use std::fmt::{self, Display};
+
 pub struct Solver<T: Sized + Minesweeper>(T);
 
 impl<T: Sized + Minesweeper> Solver<T> {
@@ -37,13 +39,13 @@ impl<T: Sized + Minesweeper> Solver<T> {
 }
 
 impl<T: Sized + Minesweeper> Iterator for Solver<T> {
-    type Item = MsResult<ProbWithIndex>;
+    type Item = MsResult<ScoredUnknown>;
     fn next(&mut self) -> Option<Self::Item> {
         self.0.step().transpose()
     }
 }
 
-impl<T: Sized + Minesweeper> fmt::Display for Solver<T> {
+impl<T: Sized + Minesweeper> Display for Solver<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let state = self.0.get_state();
         let bombs = self.0.get_bombs();

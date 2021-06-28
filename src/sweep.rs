@@ -17,12 +17,6 @@
 
 use super::*;
 
-fn enforce_consistency(state: &MinesweeperState) -> MsResult<MinesweeperState> {
-    let mut next = state.clone();
-    next.step()?;
-    Ok(next)
-}
-
 pub trait Minesweeper {
     fn get_bombs(&self) -> Option<&Vec<bool>>;
     fn get_state(&self) -> &MinesweeperState;
@@ -30,43 +24,30 @@ pub trait Minesweeper {
     fn flag(&mut self, idx: usize) -> MsResult<()>;
     fn reveal(&mut self, idx: usize) -> MsResult<()>;
     fn set_internal(&mut self, state: MinesweeperState) -> MsResult<()>;
-    fn flag_all(&mut self, state: &MinesweeperState, next: &MinesweeperState) -> MsResult<()> {
-        let iter = state
+    fn flag_all(&mut self, state: &MinesweeperState) -> MsResult<()> {
+        let indices = self
+            .get_state()
             .board()
             .iter()
-            .zip(next.board().iter())
+            .zip(state.board().iter())
             .enumerate()
             .filter_map(|(idx, (p, n))| {
                 (p != &Status::Flagged && n == &Status::Flagged).then(|| idx)
-            });
-        for idx in iter {
+            })
+            .collect::<Vec<Index>>();
+        for idx in indices {
             self.flag(idx)?;
         }
         Ok(())
     }
-    fn step(&mut self) -> MsResult<Option<ProbWithIndex>> {
-        let state = self.pull()?;
-        if let Some((p, idx)) = state.center_search() {
+    fn step(&mut self) -> MsResult<Option<ScoredUnknown>> {
+        let mut state = self.pull()?;
+        let scored_unknown = state.step();
+        self.flag_all(&state)?;
+        self.set_internal(state)?;
+        if let Some((_, idx)) = scored_unknown {
             self.reveal(idx)?;
-            return Ok(Some((p, idx)));
         }
-        if let Some((p, idx)) = state.fast_search() {
-            self.reveal(idx)?;
-            return Ok(Some((p, idx)));
-        }
-        let mut next_state = enforce_consistency(&state)?;
-        let info = next_state
-            .fast_search()
-            .or_else(|| next_state.slow_search());
-        self.flag_all(&state, &next_state)?;
-        self.set_internal(next_state)?;
-        if let Some((p, idx)) = info {
-            self.reveal(idx).map_err(|e| {
-                let (row, col) = state.as_rc(idx);
-                log::info!("Wrong ({:02}, {:02}): {:.1}%", row, col, p * 100.0);
-                e
-            })?;
-        }
-        Ok(info)
+        Ok(scored_unknown)
     }
 }
