@@ -23,65 +23,24 @@ use std::ops::Add;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MinesweeperState {
     board: Vec<Status>,
-    width: usize,
-    length: usize,
-    mines: usize,
-    flags: usize,
+    flags_remaining: usize,
     unknowns: usize,
     knowns: usize,
 }
 
 impl MinesweeperState {
-    pub fn new(width: usize, length: usize, mines: usize) -> MsResult<Self> {
-        (width * length > mines)
-            .then(|| {
-                let board = vec![Status::Unknown; width * length];
-                Self {
-                    board,
-                    width,
-                    length,
-                    mines,
-                    flags: 0,
-                    unknowns: width * length,
-                    knowns: 0,
-                }
-            })
-            .ok_or(MinesweeperError::NumberOfMinesOutOfRange)
+    pub fn new(config: &Config) -> Self {
+        let board = vec![Status::Unknown; config.size()];
+        Self { board, flags_remaining: config.mines(), unknowns: config.size(), knowns: 0 }
     }
 
-    #[inline]
-    pub fn board(&self) -> &Vec<Status> {
+    pub fn board(&self) -> &[Status] {
         &self.board
     }
-
+    
     #[inline]
-    pub fn width(&self) -> usize {
-        self.width
-    }
-
-    #[inline]
-    pub fn length(&self) -> usize {
-        self.length
-    }
-
-    #[inline]
-    pub fn size(&self) -> usize {
-        self.board().len()
-    }
-
-    #[inline]
-    pub fn mines(&self) -> usize {
-        self.mines
-    }
-
-    #[inline]
-    pub fn flags(&self) -> usize {
-        self.flags
-    }
-
-    #[inline]
-    pub fn marks(&self) -> usize {
-        self.size() - self.flags() - self.unknowns() - self.knowns()
+    pub fn flags_remaining(&self) -> usize {
+        self.flags_remaining
     }
 
     #[inline]
@@ -95,73 +54,35 @@ impl MinesweeperState {
     }
 
     #[inline]
-    pub fn flags_remaining(&self) -> usize {
-        self.mines() - self.flags()
+    pub fn size(&self) -> usize {
+        self.board.len()
     }
 
     #[inline]
-    pub fn as_rc(&self, idx: usize) -> (usize, usize) {
-        (idx / self.length, idx % self.length)
-    }
-
-    #[inline]
-    pub fn from_rc(&self, row: usize, col: usize) -> usize {
-        row * self.length + col
-    }
-
-    #[inline]
-    pub fn center(&self) -> Index {
-        self.from_rc(self.width / 2, self.length / 2)
-    }
-
-    #[inline]
-    fn set_flag(&mut self, idx: Index) {
+    pub fn set_flag(&mut self, idx: Index) {
         debug_assert_eq!(self.board[idx], Status::Unknown);
         self.board[idx] = Status::Flagged;
         self.unknowns -= 1;
-        self.flags += 1;
+        self.flags_remaining -= 1;
     }
 
     #[inline]
-    fn set_mark(&mut self, idx: Index) {
+    pub fn set_mark(&mut self, idx: Index) {
         debug_assert_eq!(self.board[idx], Status::Unknown);
         self.board[idx] = Status::Marked;
         self.unknowns -= 1;
     }
 
-    pub fn set_known(&mut self, idx: Index, bombs: &Vec<bool>) {
-        debug_assert!(matches!(self.board[idx], Status::Marked | Status::Unknown));
-        if !bombs[idx] {
-            let square = self.square(idx);
-            let count = square.iter().filter(|&&cidx| bombs[cidx]).count();
-            if self.board[idx] == Status::Unknown {
-                self.unknowns -= 1;
-            }
-            self.board[idx] = Status::Known(count);
-            self.knowns += 1;
-            if count == 0 {
-                for cidx in square {
-                    if matches!(self.board[cidx], Status::Marked | Status::Unknown) {
-                        self.set_known(cidx, bombs);
-                    }
-                }
-            }
+    #[inline]
+    pub fn set_known(&mut self, idx: Index, count: usize) {
+        if self.board[idx] == Status::Unknown {
+            self.unknowns -= 1;
         }
+        self.board[idx] = Status::Known(count);
+        self.knowns -= 1;
     }
 
-    fn square(&self, idx: Index) -> Square {
-        let (row, col) = self.as_rc(idx);
-        let rmin = max(1, row) - 1;
-        let rmax = min(self.width - 1, row + 1);
-        let cmin = max(1, col) - 1;
-        let cmax = min(self.length - 1, col + 1);
-        (rmin..=rmax)
-            .flat_map(|r| (cmin..=cmax).map(move |c| self.from_rc(r, c)))
-            .filter(|cidx| cidx != &idx)
-            .collect()
-    }
-
-    fn filter_status<'a>(
+    pub fn filter_status<'a>(
         &'a self,
         square: &'a Square,
         status: Status,
@@ -171,51 +92,21 @@ impl MinesweeperState {
             .filter_map(move |&cidx| (self.board[cidx] == status).then(|| cidx))
     }
 
-    fn get(&self, idx: Index) -> Option<usize> {
+    #[inline]
+    pub fn get(&self, idx: Index) -> Status {
+        self.board[idx]
+    }
+
+    #[inline]
+    pub fn get_known(&self, idx: Index) -> Option<usize> {
         match self.board[idx] {
             Status::Known(x) => Some(x),
             _ => None,
         }
     }
+}
 
-    fn make_consistent_all(&mut self) -> MsResult<()> {
-        for idx in 0..self.size() {
-            self.make_consistent(idx)?;
-        }
-        Ok(())
-    }
-
-    fn make_consistent_sq(&mut self, idx: Index) -> MsResult<()> {
-        for idx in self.square(idx) {
-            self.make_consistent(idx)?;
-        }
-        Ok(())
-    }
-
-    fn make_consistent(&mut self, idx: Index) -> MsResult<()> {
-        if let Status::Known(count) = self.board[idx] {
-            let square = self.square(idx);
-            let minimum = self.filter_status(&square, Status::Flagged).count();
-            let unknowns = self
-                .filter_status(&square, Status::Unknown)
-                .collect::<Square>();
-            let maximum = minimum + unknowns.len();
-            if !(minimum..=maximum).contains(&count) {
-                return Err(MinesweeperError::NumberOfMinesOutOfRange);
-            }
-            for cidx in unknowns {
-                if count == minimum && self.board[cidx] != Status::Marked {
-                    self.set_mark(cidx);
-                } else if count == maximum && self.board[cidx] != Status::Flagged {
-                    self.set_flag(cidx);
-                } else {
-                    continue;
-                }
-                self.make_consistent_sq(cidx)?;
-            }
-        }
-        Ok(())
-    }
+/*
 
     fn evaluate(&mut self, group_idx: usize, group: &[usize]) -> Option<Evaluation> {
         if let Some(idx) = group.get(group_idx) {
@@ -284,7 +175,7 @@ impl MinesweeperState {
         }
     }
 
-    pub fn center_search(&self) -> Option<ScoredUnknown> {
+    pub fn center_search(&self) -> Option<ScoredIndex> {
         let center = self.center();
         match self.board[center] {
             Status::Known(_) => None,
@@ -293,7 +184,7 @@ impl MinesweeperState {
         }
     }
 
-    pub fn fast_search(&mut self) -> Option<ScoredUnknown> {
+    pub fn fast_search(&mut self) -> Option<ScoredIndex> {
         let idx = self
             .board
             .iter()
@@ -302,7 +193,7 @@ impl MinesweeperState {
     }
 
     #[allow(dead_code)]
-    pub fn crude_search(&self) -> Option<ScoredUnknown> {
+    pub fn crude_search(&self) -> Option<ScoredIndex> {
         let base = R64::try_new((self.flags() as f64) / (self.unknowns() as f64))?;
         let mut compls = vec![None; self.size()];
         for (idx, status) in self.board.iter().enumerate() {
@@ -331,7 +222,7 @@ impl MinesweeperState {
         Some((p, idx))
     }
 
-    fn estimate(&self, group: Vec<Index>) -> Option<ScoredUnknown> {
+    fn estimate(&self, group: Vec<Index>) -> Option<ScoredIndex> {
         group
             .into_iter()
             .filter_map(|idx| {
@@ -351,7 +242,7 @@ impl MinesweeperState {
             .max()
     }
 
-    fn estimate_unassigned(&self, group: Vec<Index>) -> Option<ScoredUnknown> {
+    fn estimate_unassigned(&self, group: Vec<Index>) -> Option<ScoredIndex> {
         let idx = group.first()?;
         let p = R64::try_new((self.flags_remaining() as f64) / (self.unknowns() as f64))?; // @todo
         Some((p, *idx))
@@ -372,46 +263,9 @@ impl MinesweeperState {
         }
     }
 
-    fn probabilistic_search(
-        &self,
-        group: &Group<Index>,
-        eval: &Evaluation,
-    ) -> Option<(R64, Index)> {
-        let Evaluation {
-            conf_counts,
-            mark_counts,
-        } = eval;
-        let unknowns_otherwise = group
-            .iter()
-            .filter(|idx| self.board[**idx] == Status::Unknown)
-            .count();
-        let base = R64::try_new((self.flags_remaining() as f64) / (self.unknowns() as f64))?.raw();
-        debug_assert!(0.0 <= base && base <= 1.0);
-        mark_counts
-            .iter()
-            .enumerate()
-            .map(|(group_idx, mark_count)| {
-                let idx = group[group_idx];
-                let mark_prob = mark_count
-                    .iter()
-                    .zip(conf_counts.iter())
-                    .enumerate()
-                    .take(unknowns_otherwise + 1)
-                    .filter_map(|(i, (mark, conf))| {
-                        if self.board[idx] != Status::Unknown {
-                            return None;
-                        }
-                        let p = (*mark as f64) / (*conf as f64)
-                            * Binomial::new(unknowns_otherwise, base).mass(i);
-                        R64::try_new(p)
-                    })
-                    .sum::<R64>();
-                (mark_prob, idx)
-            })
-            .max()
-    }
+    
 
-    pub fn slow_search(&mut self) -> Option<ScoredUnknown> {
+    pub fn slow_search(&mut self) -> Option<ScoredIndex> {
         let mut assigned = self
             .board
             .iter()
@@ -460,7 +314,7 @@ impl MinesweeperState {
         max(best, self.estimate_unassigned(unknowns_unassigned))
     }
 
-    fn search(&mut self) -> Result<(), ScoredUnknown> {
+    fn search(&mut self) -> Result<(), ScoredIndex> {
         util::unerr(self.center_search())?;
         util::unerr(self.fast_search())?;
         self.make_consistent_all().unwrap();
@@ -469,7 +323,7 @@ impl MinesweeperState {
         Ok(())
     }
 
-    pub fn step(&mut self) -> Option<ScoredUnknown> {
+    pub fn step(&mut self) -> Option<ScoredIndex> {
         let info = self.search().err();
         if let Some((p, idx)) = info {
             let (row, col) = self.as_rc(idx);
@@ -478,3 +332,4 @@ impl MinesweeperState {
         info
     }
 }
+*/

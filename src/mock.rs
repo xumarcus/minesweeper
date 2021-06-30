@@ -17,54 +17,47 @@
 
 use super::*;
 
-use rand::{
-    self,
-    distributions::{Distribution, Uniform},
-    rngs::StdRng,
-    SeedableRng,
-};
-
 pub struct MockMinesweeper {
     state: MinesweeperState,
     bombs: Vec<bool>,
 }
 
 impl MockMinesweeper {
-    pub fn new(width: usize, length: usize, mines: usize, seed: Option<u64>) -> MsResult<Self> {
-        let state = MinesweeperState::new(width, length, mines)?;
-        let seed = seed.unwrap_or_else(|| rand::random::<u64>());
-        log::debug!("Create mock with seed {}", seed);
-        let mut rng = StdRng::seed_from_u64(seed);
-        let w_gen = Uniform::from(0..width);
-        let l_gen = Uniform::from(0..length);
-        let mut bombs = vec![false; state.size()];
-        for _ in 0..mines {
+    pub fn new(&mut config: Config) -> Self {
+        let state = MinesweeperState::new(config);
+        let mut bombs = vec![false; config.size()];
+        for _ in 0..config.mines() {
             loop {
-                let row = w_gen.sample(&mut rng);
-                let col = l_gen.sample(&mut rng);
-                let idx = state.from_rc(row, col);
-                if idx != state.center() && !bombs[idx] {
+                let idx = config.random_index();
+                if idx != config.center() && !bombs[idx] {
                     bombs[idx] = true;
                     break;
                 }
             }
         }
-        Ok(Self { state, bombs })
+        Self { state, bombs }
     }
 
-    #[rustfmt::skip]
-    pub fn from_difficulty(diff: Difficulty, seed: Option<u64>) -> Self {
-        let result = match diff {
-            Difficulty::Beginner     => Self::new( 9,  9, 10, seed),
-            Difficulty::Intermediate => Self::new(16, 16, 40, seed),
-            Difficulty::Expert       => Self::new(16, 30, 99, seed),
-        };
-        result.unwrap()
+    fn _reveal(&mut self, idx: Index, squares: &[Square]) {
+        debug_assert!(matches!(self.state.get(idx), Status::Marked | Status::Unknown));
+        if !self.bombs[idx] {
+            let square = squares[idx];
+            let count = square.iter().filter(|&&cidx| self.bombs[cidx]).count();
+            self.state.set_known(idx, count);
+            if count != 0 {
+                return;
+            }
+            for cidx in square {
+                if matches!(self.state.get(cidx), Status::Marked | Status::Unknown) {
+                    self._reveal(cidx, squares);
+                }
+            }
+        }
     }
 }
 
 impl Minesweeper for MockMinesweeper {
-    fn get_bombs(&self) -> Option<&Vec<bool>> {
+    fn get_bombs(&self) -> Option<&[bool]> {
         Some(&self.bombs)
     }
 
@@ -81,9 +74,9 @@ impl Minesweeper for MockMinesweeper {
         Ok(()) // Noop cuz mock
     }
 
-    fn reveal(&mut self, idx: usize) -> MsResult<()> {
+    fn reveal(&mut self, idx: usize, squares: &[Square]) -> MsResult<()> {
         (!self.bombs[idx])
-            .then(|| self.state.set_known(idx, &self.bombs))
+            .then(|| self._reveal(idx, squares))
             .ok_or(MinesweeperError::RevealedBomb(idx))
     }
 

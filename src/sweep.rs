@@ -24,7 +24,7 @@ pub trait Minesweeper {
     fn flag(&mut self, idx: usize) -> MsResult<()>;
     fn reveal(&mut self, idx: usize) -> MsResult<()>;
     fn set_internal(&mut self, state: MinesweeperState) -> MsResult<()>;
-    fn flag_all(&mut self, state: &MinesweeperState) -> MsResult<()> {
+    fn push(&mut self, state: MinesweeperState) -> MsResult<()> {
         let indices = self
             .get_state()
             .board()
@@ -38,16 +38,6 @@ pub trait Minesweeper {
         for idx in indices {
             self.flag(idx)?;
         }
-        Ok(())
-    }
-    fn step(&mut self) -> MsResult<Option<ScoredUnknown>> {
-        let mut state = self.pull()?;
-        let scored_unknown = state.step();
-        self.flag_all(&state)?;
-        self.set_internal(state)?;
-        if let Some((_, idx)) = scored_unknown {
-            self.reveal(idx)?;
-        }
-        Ok(scored_unknown)
+        self.set_internal(state)
     }
 }

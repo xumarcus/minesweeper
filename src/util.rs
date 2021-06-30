@@ -15,24 +15,9 @@
 // You should have received a copy of the GNU General Public License
 // along with minesweeper.  If not, see <http://www.gnu.org/licenses/>.
 
-use super::*;
-
 pub fn lift<T, F: Fn(T, T) -> T>(a: Option<T>, b: Option<T>, f: F) -> Option<T> {
     match (a, b) {
         (Some(x), Some(y)) => Some(f(x, y)),
         (a, b) => a.or(b),
-    }
-}
-
-pub fn one_hot(size: usize, idx: usize) -> Group<usize> {
-    let mut v = smallvec![0; size];
-    v[idx] = 1;
-    v
-}
-
-pub fn unerr<T: Default, E>(x: Option<E>) -> Result<T, E> {
-    match x {
-        Some(x) => Err(x),
-        None => Ok(T::default()),
     }
 }

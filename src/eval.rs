@@ -17,31 +17,105 @@
 
 use super::*;
 
-use std::ops::Add;
+use itertools::{EitherOrBoth, Itertools};
 
-fn zip_with<T, U, F: Fn(T, T) -> U>(a: Group<T>, b: Group<T>, f: F) -> Group<U> {
-    a.into_iter()
-        .zip(b.into_iter())
-        .map(|(x, y)| f(x, y))
-        .collect()
-}
-
-fn add_with<T: Add>(a: Group<T>, b: Group<T>) -> Group<<T as std::ops::Add>::Output> {
-    zip_with(a, b, T::add)
+fn one_hot(x: usize) -> Vec<R64> {
+    let mut v = vec![R64::new(0.0); x + 1];
+    v[x] = R64::new(1.0);
+    v
 }
 
 pub struct Evaluation {
-    pub conf_counts: Group<usize>,
-    pub mark_counts: Group<Group<usize>>,
+    count: R64,
+    p_flags_eq: Vec<R64>,
+    p_is_flag_given_total: Vec<(Index, Vec<R64>)>,
 }
 
-impl Add for Evaluation {
-    type Output = Self;
+impl Evaluation {
+    pub fn new(state: &MinesweeperState, group: &BitVec) -> Self {
+        let group_flags = group.iter_ones().filter(|&idx| state.get(idx) == Status::Flagged).count();
+        Self {
+            count: R64::new(1.0),
+            p_flags_eq: one_hot(group_flags),
+            p_is_flag_given_total: group.iter_ones().map(|idx| (idx, one_hot(group_flags))).collect()
+        }
+    }
 
-    fn add(self, other: Self) -> Self {
-        Evaluation {
-            conf_counts: add_with(self.conf_counts, other.conf_counts),
-            mark_counts: zip_with(self.mark_counts, other.mark_counts, add_with),
+    /*
+    pub fn add_same_group_evals(a: Self, b: Self) -> Self {
+        let count = a.count + b.count;
+        let merge_prob = |c: R64, d: R64| (c * a.count + d * b.count) / count;
+        let p_flags_eq = a.p_flags_eq.into_iter()
+            .zip_longest(b.p_flags_eq.into_iter())
+            .map(|either| match either {
+                EitherOrBoth::Both(x, y) => x + y,
+                EitherOrBoth::Left(x) | EitherOrBoth::Right(x) => x,
+            })
+            .collect();
+        let p_is_flag_given_total = a.p_is_flag_given_total.into_iter()
+            .zip(b.p_is_flag_given_total.into_iter())
+            .map(|((i, x), (j, y))| {
+                debug_assert_eq!(i, j);
+                let z = x.into_iter()
+                    .zip_longest(y.into_iter())
+                    .map(|either| match either {
+                        EitherOrBoth::Both(c, d) => merge_prob(c, d),
+                        EitherOrBoth::Left(c) => merge_prob(c, R64::new(0.0)),
+                        EitherOrBoth::Right(d) => merge_prob(R64::new(0.0), d),
+                    })
+                    .collect();
+                (i, z)
+            })
+            .collect();
+        Self {
+            count,
+            p_flags_eq,
+            p_is_flag_given_total
+        }
+    }
+    */
+
+    pub fn add_disj_group_evals(unknowns_remaining: usize, flags_remaining: usize, a: Self, b: Self) -> Self {
+        let count = a.count * b.count;
+        let len = a.p_flags_eq.len() + b.p_flags_eq.len() + 1;
+        let mut p_flags_eq = vec![R64::new(0.0); len]; 
+        for (i, x) in a.p_flags_eq.into_iter().enumerate() {
+            for (j, y) in b.p_flags_eq.into_iter().enumerate() {
+                p_flags_eq[i + j] += x * y;
+            }
+        }
+        let new_ifgt = |other: &Self, ifgt: &[(Index, Vec<R64>)]| ifgt
+            .iter()
+            .map(|(idx, orig)| {
+                let max_flags = orig.len() + other.p_flags_eq.len() - 2;
+                let weights = (0..orig.len())
+                    .map(|i| {
+                        let n = ifgt.len();
+                        let n_bar = unknowns_remaining - other.p_is_flag_given_total.len();
+                        let numer = flags_remaining - max_flags + i;
+                        let p = (numer as f64) / (n_bar as f64);
+                        debug_assert!(0.0 <= p && p <= 1.0);
+                        R64::new(Binomial::new(n, p).mass(i))
+                    })
+                    .collect::<Vec<R64>>();
+                let w_sum = weights.iter().sum::<R64>();
+                let new_vec = (0..=max_flags)
+                    .map(|flag_count| orig
+                        .into_iter()
+                        .zip(weights.into_iter())
+                        .map(|(&p, w)| p * w / w_sum)
+                        .sum::<R64>()
+                    )
+                    .collect();
+                (*idx, new_vec)
+            });
+        let p_is_flag_given_total = new_ifgt(&b, &a.p_is_flag_given_total)
+            .merge(new_ifgt(&a, &b.p_is_flag_given_total))
+            .collect();
+        Self {
+            count,
+            p_flags_eq,
+            p_is_flag_given_total
         }
     }
 }

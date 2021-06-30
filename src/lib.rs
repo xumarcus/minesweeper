@@ -15,6 +15,9 @@
 // You should have received a copy of the GNU General Public License
 // along with minesweeper.  If not, see <http://www.gnu.org/licenses/>.
 
+mod config;
+pub use config::Config;
+
 mod enums;
 pub use enums::*;
 
@@ -42,11 +45,18 @@ use noisy_float::prelude::R64;
 
 use probability::distribution::{Binomial, Discrete};
 
-use smallvec::{smallvec, SmallVec};
+use arrayvec::ArrayVec;
 
-const GROUP_SIZE: usize = 32;
+use bitvec::prelude::*;
+
+use rand::{
+    self,
+    Rng,
+    SeedableRng,
+    distributions::{Distribution, Uniform},
+    rngs::StdRng,
+};
 
 type Index = usize;
-type Group<T> = SmallVec<[T; GROUP_SIZE]>;
-type ScoredUnknown = (R64, usize);
-type Square = SmallVec<[Index; 8]>;
+type ScoredIndex = (R64, usize);
+type Square = ArrayVec<usize, 8>;

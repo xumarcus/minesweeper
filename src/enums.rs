@@ -19,14 +19,10 @@ use thiserror::Error;
 
 #[derive(Clone, Copy, Debug, Error)]
 pub enum MinesweeperError {
-    #[error("FlaggedButNotBomb")]
-    FlaggedButNotBomb(usize),
     #[error("NumberOfMinesOutOfRange")]
     NumberOfMinesOutOfRange,
     #[error("RevealedBomb")]
     RevealedBomb(usize),
-    #[error("SolverEarlyExit")]
-    SolverEarlyExit(usize),
 }
 
 pub type MsResult<T> = Result<T, MinesweeperError>;
