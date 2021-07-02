@@ -17,9 +17,6 @@
 
 use super::*;
 
-use std::cmp::{max, min};
-use std::ops::Add;
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MinesweeperState {
     board: Vec<Status>,

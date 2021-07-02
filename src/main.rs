@@ -36,18 +36,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     logger.init()?;
     
-    let inst = MockMinesweeper::from_difficulty(diff, seed);
-    let mut solver = Solver::new(inst);
-    let res = solver.solve();
-    log::info!("{}", solver);
-    res.map_err(From::from)
-}
-
-/*
-fn main() {
-    for _ in 0..2000 {
-        let inst = MockMinesweeper::from_difficulty(Difficulty::Expert, None);
-        Solver::new(inst).solve();
+    let config = Config::from_difficulty(diff, seed);
+    let mut inst = MockMinesweeper::new(&config);
+    while let Some((p, idx)) = inst.solve_next()? {
+        println!("{} {}", p.raw(), idx);
     }
+    Ok(())
 }
-*/

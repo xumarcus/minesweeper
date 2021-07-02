@@ -8,7 +8,7 @@
 // (at your option) any later version.
 //
 // minesweeper is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// but WITHOUT ANY WARRANTY; without   the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 //
@@ -18,9 +18,10 @@
 use super::*;
 
 pub trait Minesweeper {
-    fn get_bombs(&self) -> Option<&Vec<bool>>;
+    fn get_bombs(&self) -> Option<&[bool]>;
+    fn get_config(&self) -> &Config;
     fn get_state(&self) -> &MinesweeperState;
-    fn pull(&mut self) -> MsResult<MinesweeperState>;
+    fn pull(&self) -> MsResult<MinesweeperState>;
     fn flag(&mut self, idx: usize) -> MsResult<()>;
     fn reveal(&mut self, idx: usize) -> MsResult<()>;
     fn set_internal(&mut self, state: MinesweeperState) -> MsResult<()>;
@@ -39,5 +40,15 @@ pub trait Minesweeper {
             self.flag(idx)?;
         }
         self.set_internal(state)
+    }
+    fn solve_next(&mut self) -> MsResult<Option<ScoredIndex>> {
+        let mut state = self.pull()?;
+        let scored_index = solve::solve_next(self.get_config(), &mut state);
+        log::info!("{:?}", scored_index);
+        self.push(state)?;
+        if let Some((_, idx)) = scored_index {
+            self.reveal(idx)?;
+        }
+        Ok(scored_index)
     }
 }

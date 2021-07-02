@@ -24,22 +24,19 @@ pub use enums::*;
 mod eval;
 use eval::Evaluation;
 
+mod group;
+use group::Group;
+
+mod interface;
+pub use interface::Minesweeper;
+
 mod mock;
 pub use mock::MockMinesweeper;
 
 mod solve;
-pub use solve::Solver;
-
-mod showstate;
-use showstate::ShowState;
 
 mod state;
 use state::MinesweeperState;
-
-mod sweep;
-use sweep::Minesweeper;
-
-mod util;
 
 use noisy_float::prelude::R64;
 
@@ -51,7 +48,6 @@ use bitvec::prelude::*;
 
 use rand::{
     self,
-    Rng,
     SeedableRng,
     distributions::{Distribution, Uniform},
     rngs::StdRng,
