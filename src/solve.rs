@@ -17,7 +17,7 @@
 
 use super::*;
 
-use std::ops::{Add, Mul};
+use std::ops::Add;
 
 #[derive(Clone, Debug)]
 pub struct Solver {
@@ -130,14 +130,19 @@ impl Solver {
         self.center_search(state)
             .or_else(|| Self::fast_search(state))
             .or_else(|| {
-                assert!(self.make_consistent_all(state));
+                self.make_consistent_all(state).then(|| ())?;
                 Self::fast_search(state)
-            })
-            .or_else(|| {
-                let group = Group::new(&self, state)?;
-                let eval = self.evaluate_branch(state.clone(), group)?;
-                log::debug!("{:?}", eval);
-                Self::fast_search(state)
+                    .or_else(|| {
+                        let group = Group::new(&self, state)?;
+                        let unknowns_count = group.count_unknowns();
+                        let eval = self.evaluate_branch(state.clone(), group)?;
+                        log::debug!("{:?}", eval);
+                        eval.label_certains(state);
+                        Self::fast_search(state)
+                            .or_else(|| {
+
+                            })
+                    })
             })
     }
 }
