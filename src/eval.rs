@@ -17,126 +17,149 @@
 
 use super::*;
 
+use std::ops::{Add, Mul};
+
 use itertools::{EitherOrBoth, Itertools};
 
-fn one_hot(x: usize) -> Vec<R64> {
-    let mut v = vec![R64::new(0.0); x + 1];
-    v[x] = R64::new(1.0);
-    v
+fn index_join<'a, T, F: 'a + Fn(T, T) -> T>(a: Vec<(Index, T)>, b: Vec<(Index, T)>, f: F) -> Vec<(Index, T)> {
+    a.into_iter()
+        .zip(b.into_iter())
+        .map(|((i, x), (j, y))| {
+            debug_assert_eq!(i, j);
+            (i, f(x, y))
+        })
+        .collect()
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct PF(Vec<R64>);
+
+impl PF {
+    pub fn new(size: usize) -> Self {
+        PF(vec![R64::new(0.0); size])
+    }
+
+    pub fn one_hot(x: usize) -> Self {
+        let mut pf = PF::new(x + 1);
+        pf.0[x] = R64::new(1.0);
+        pf
+    }
+
+    pub fn zip_with<'a, F: 'a + Fn(R64, R64) -> R64>(&self, rhs: &Self, f: F) -> Self {
+        PF(self.0.iter()
+            .zip(rhs.0.iter())
+            .map(|(&x, &y)| f(x, y))
+            .collect())
+    }
+
+    #[rustfmt::skip]
+    pub fn zip_with_longest<'a, F: 'a + Fn(R64, R64) -> R64>(&self, rhs: &Self, f: F, default: R64) -> Self {
+        PF(self.0.iter()
+            .zip_longest(rhs.0.iter())
+            .map(|either| match either {
+                EitherOrBoth::Both(&c, &d) => f(c, d),
+                EitherOrBoth::Left(&c)     => f(c, default),
+                EitherOrBoth::Right(&d)    => f(default, d),
+            })
+            .collect())
+    }
+
+    pub fn convolve(&self, rhs: &Self) -> Self {
+        let mut pf = PF::new(self.0.len() + rhs.0.len() + 1);
+        for (i, &x) in self.0.iter().enumerate() {
+            for (j, &y) in rhs.0.iter().enumerate() {
+                pf.0[i + j] += x * y; 
+            }
+        }
+        pf
+    }
+}
+
+impl Add for PF {
+    type Output = Self;
+    fn add(self, rhs: Self) -> Self {
+        self.zip_with_longest(&rhs, |x, y| x + y, R64::new(0.0))
+    }
+}
+
+impl Add for &PF {
+    type Output = PF;
+    fn add(self, rhs: Self) -> PF {
+        self.zip_with_longest(rhs, |x, y| x + y, R64::new(0.0))
+    }
+}
+
+impl Mul for PF {
+    type Output = Self;
+    fn mul(self, rhs: Self) -> Self {
+        self.zip_with(&rhs, |x, y| x * y)
+    }
+}
+
+impl Mul for &PF {
+    type Output = PF;
+    fn mul(self, rhs: Self) -> PF {
+        self.zip_with(rhs, |x, y| x * y)
+    }
 }
 
 #[derive(Clone, Debug)]
 pub struct Evaluation {
     count: R64,
-    p_flags_eq: Vec<R64>,
-    p_is_flag_given_total: Vec<(Index, Vec<R64>)>,
+    spf: PF,
+    ipf: Vec<(Index, PF)>,
 }
 
 impl Evaluation {
     pub fn new(state: &MinesweeperState, idx: Index) -> Self {
-        let p_flags_eq = match state.get(idx) {
-            Status::Flagged => vec![R64::new(0.0), R64::new(1.0)],
-            Status::Marked => vec![R64::new(1.0)],
+        let spf = match state.get(idx) {
+            Status::Flagged => PF::one_hot(1),
+            Status::Marked => PF::one_hot(0),
             _ => unreachable!(),
         };
-        let p_is_flag_given_total = vec![(idx, p_flags_eq.clone())];
-        Self {
-            count: R64::new(1.0),
-            p_flags_eq,
-            p_is_flag_given_total
-        }
-    }
-
-    fn ifgt_of_other(&self, unknowns_remaining: usize, flags_remaining: usize, ifgt: &[(Index, Vec<R64>)]) -> Vec<(Index, Vec<R64>)> {
-        ifgt.iter().map(|(idx, orig)| {
-            let n = ifgt.len();
-            let denom = unknowns_remaining - self.p_is_flag_given_total.len();
-            let max_flags = orig.len() + self.p_flags_eq.len() - 2;
-            let new_vec = (0..=max_flags)
-                .map(|flag_count| {
-                    let weights = (0..orig.len())
-                        .map(|i| {
-                            let numer = flags_remaining - flag_count + i;
-                            let p = (numer as f64) / (denom as f64);
-                            debug_assert!(0.0 <= p && p <= 1.0);
-                            R64::new(Binomial::new(n, p).mass(i))
-                        })
-                        .collect::<Vec<R64>>();
-                    let w_sum = weights.iter().sum::<R64>();
-                    orig
-                        .into_iter()
-                        .zip(weights)
-                        .map(|(&p, w)| p * w / w_sum)
-                        .sum::<R64>()
-                })
-                .collect();
-            (*idx, new_vec)
-        })
-        .collect()
-    }
-
-    pub fn add_same_group_evals(a: Self, b: Self) -> Self {
-        let count = a.count + b.count;
-        let a_p = a.count / count;
-        let b_p = b.count / count;
-        let merge_prob = |c: R64, d: R64| c * a_p + d * b_p;
-        let p_flags_eq = a.p_flags_eq.into_iter()
-            .zip_longest(b.p_flags_eq.into_iter())
-            .map(|either| match either {
-                EitherOrBoth::Both(x, y) => x + y,
-                EitherOrBoth::Left(x) | EitherOrBoth::Right(x) => x,
-            })
-            .collect();
-        let p_is_flag_given_total = a.p_is_flag_given_total.into_iter()
-            .zip(b.p_is_flag_given_total.into_iter())
-            .map(|((i, x), (j, y))| {
-                debug_assert_eq!(i, j);
-                let z = x.into_iter()
-                    .zip_longest(y.into_iter())
-                    .map(|either| match either {
-                        EitherOrBoth::Both(c, d) => merge_prob(c, d),
-                        EitherOrBoth::Left(c) => merge_prob(c, R64::new(0.0)),
-                        EitherOrBoth::Right(d) => merge_prob(R64::new(0.0), d),
-                    })
-                    .collect();
-                (i, z)
-            })
-            .collect();
-        Self {
-            count,
-            p_flags_eq,
-            p_is_flag_given_total
-        }
-    }
-
-    pub fn add_disj_group_evals(unknowns_remaining: usize, flags_remaining: usize, a: Self, b: Self) -> Self {
-        let count = a.count * b.count;
-        let len = a.p_flags_eq.len() + b.p_flags_eq.len() + 1;
-        let mut p_flags_eq = vec![R64::new(0.0); len]; 
-        for (i, &x) in a.p_flags_eq.iter().enumerate() {
-            for (j, &y) in b.p_flags_eq.iter().enumerate() {
-                p_flags_eq[i + j] += x * y; 
-            }
-        }
-        let p_is_flag_given_total = b.ifgt_of_other(unknowns_remaining, flags_remaining, &a.p_is_flag_given_total).into_iter()
-            .merge(a.ifgt_of_other(unknowns_remaining, flags_remaining, &b.p_is_flag_given_total).into_iter())
-            .collect();
-        Self {
-            count,
-            p_flags_eq,
-            p_is_flag_given_total
-        }
+        let ipf = vec![(idx, spf.clone())];
+        Self { count: R64::new(1.0), spf, ipf }
     }
 
     pub fn label_certains(&self, state: &mut MinesweeperState) {
-        for (idx, pv) in &self.p_is_flag_given_total {
-            debug_assert!(!pv.is_empty());
-            if pv.iter().all(|&p| p.raw() == 1.0) {
+        for (idx, pf) in &self.ipf {
+            debug_assert!(!pf.0.is_empty());
+            if pf.0.iter().all(|&p| p.raw() == 1.0) {
                 state.set_flag(*idx);
             }
-            if pv.iter().all(|&p| p.raw() == 0.0) {
+            if pf.0.iter().all(|&p| p.raw() == 0.0) {
                 state.set_mark(*idx);
             }
         }
+    }
+}
+
+impl Add for Evaluation {
+    type Output = Self;
+    fn add(self, rhs: Self) -> Self {
+        let count = self.count + rhs.count;
+        let p = self.count / count;
+        let q = rhs.count / count;
+        let f = |c: R64, d: R64| c * p + d * q;
+        let g = |x: PF, y: PF| x.zip_with_longest(&y, f, R64::new(0.0));
+        Self {
+            count,
+            spf: self.spf + rhs.spf,
+            ipf: index_join(self.ipf, rhs.ipf, g)
+        }
+    }
+}
+
+impl Mul for Evaluation {
+    type Output = Self;
+    fn mul(self, rhs: Self) -> Self {
+        let count = self.count * rhs.count;
+        let spf = self.spf.convolve(&rhs.spf);
+        let lhs_ipf = self.ipf.iter()
+            .map(|(idx, pf)| (*idx, (pf * &self.spf).convolve(&rhs.spf)));
+        let rhs_ipf = rhs.ipf.iter()
+            .map(|(idx, pf)| (*idx, (pf * &rhs.spf).convolve(&self.spf)));
+        let ipf = lhs_ipf.merge(rhs_ipf).collect();
+        Self { count, spf, ipf }
     }
 }

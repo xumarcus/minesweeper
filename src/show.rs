@@ -19,13 +19,16 @@ use super::*;
 
 use std::fmt::{self, Display};
 
+pub struct Show<T: Sized + Minesweeper>(pub T);
+
 impl<T: Sized + Minesweeper> Display for Show<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let bombs = self.sweep.get_bombs();
-        let state = self.sweep.get_state();
-        writeln!(f, "{:?}; {}", self.config, state.flags_remaining())?;
+        let bombs = self.0.get_bombs();
+        let config = self.0.get_config();
+        let state = self.0.get_state();
+        writeln!(f, "{:?}; {}", config, state.flags_remaining())?;
         for (idx, status) in state.board().iter().enumerate() {
-            if idx % self.config.length() == 0 {
+            if idx % config.length() == 0 {
                 write!(f, "\n")?;
             }
             if bombs.and_then(|bombs| bombs.get(idx)).cloned().unwrap_or(false) {

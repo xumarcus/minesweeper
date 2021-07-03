@@ -33,25 +33,20 @@ pub use interface::Minesweeper;
 mod mock;
 pub use mock::MockMinesweeper;
 
+mod show;
+pub use show::Show;
+
 mod solve;
+pub use solve::Solver;
 
 mod state;
 use state::MinesweeperState;
 
 use noisy_float::prelude::R64;
 
-use probability::distribution::{Binomial, Discrete};
-
 use arrayvec::ArrayVec;
 
 use bitvec::prelude::*;
-
-use rand::{
-    self,
-    SeedableRng,
-    distributions::{Distribution, Uniform},
-    rngs::StdRng,
-};
 
 type Index = usize;
 type ScoredIndex = (R64, usize);

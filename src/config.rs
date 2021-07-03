@@ -19,9 +19,15 @@ use super::*;
 
 use std::cmp::{max, min};
 
-use rand::Rng;
+use rand::{
+    self,
+    Rng,
+    SeedableRng,
+    distributions::{Distribution, Uniform},
+    rngs::StdRng,
+};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct Config {
     width: usize,
     length: usize,
@@ -36,29 +42,7 @@ impl Config {
         }
         let seed = seed.unwrap_or_else(rand::random::<u64>);
         log::debug!("Create seed {}", seed);
-        let mut inst = Self { width, length, mines, squares: vec![], seed };
-        inst.squares = (0..inst.size())
-            .map(|idx| {
-                let (row, col) = inst.as_rc(idx);
-                let rmin = max(1, row) - 1;
-                let rmax = min(inst.width() - 1, row + 1);
-                let cmin = max(1, col) - 1;
-                let cmax = min(inst.length() - 1, col + 1);
-                let mut av = Square::new();
-                for r in rmin..=rmax {
-                    for c in cmin..=cmax {
-                        let cidx = inst.from_rc(r, c);
-                        if cidx != idx {
-                            av.push(cidx);
-                        }
-                    }
-                }
-                av
-            })
-            .collect();
-        inst
-        })
-        .ok_or()
+        Ok(Self { width, length, mines, seed })
     }
 
     #[inline]
@@ -109,8 +93,18 @@ impl Config {
     }
 
     #[inline]
-    pub fn square(&self, idx: Index) -> &[Index] {
-        &self.squares[idx]
+    pub fn square(&self, idx: Index) -> impl Iterator<Item = Index> + '_ {
+        let (row, col) = self.as_rc(idx);
+        let rmin = max(1, row) - 1;
+        let rmax = min(self.width() - 1, row + 1);
+        let cmin = max(1, col) - 1;
+        let cmax = min(self.length() - 1, col + 1);
+        (rmin..=rmax).flat_map(move |r| {
+            (cmin..=cmax).filter_map(move |c| {
+                let cidx = self.from_rc(r, c);
+                (cidx != idx).then(|| cidx)
+            })
+        })
     }
     
     #[rustfmt::skip]

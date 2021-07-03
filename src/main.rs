@@ -37,8 +37,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     logger.init()?;
     
     let config = Config::from_difficulty(diff, seed);
-    let mut inst = MockMinesweeper::new(&config);
-    while let Some((p, idx)) = inst.solve_next()? {
+    let solver = Solver::new(config);
+    let mut inst = MockMinesweeper::new(config);
+    while let Some((p, idx)) = inst.solve_next(&solver)? {
         println!("{} {}", p.raw(), idx);
     }
     Ok(())

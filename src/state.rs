@@ -76,7 +76,7 @@ impl MinesweeperState {
             self.unknowns -= 1;
         }
         self.board[idx] = Status::Known(count);
-        self.knowns -= 1;
+        self.knowns += 1;
     }
 
     pub fn filter_status<'a>(
@@ -99,6 +99,22 @@ impl MinesweeperState {
         match self.board[idx] {
             Status::Known(x) => Some(x),
             _ => None,
+        }
+    }
+
+    pub fn reveal(&mut self, idx: Index, bombs: &[bool], config: Config) {
+        debug_assert!(matches!(self.get(idx), Status::Marked | Status::Unknown));
+        if !bombs[idx] {
+            let count = config.square(idx).filter(|&cidx| bombs[cidx]).count();
+            self.set_known(idx, count);
+            if count != 0 {
+                return;
+            }
+            for cidx in config.square(idx) {
+                if matches!(self.get(cidx), Status::Marked | Status::Unknown) {
+                    self.reveal(cidx, bombs, config);
+                }
+            }
         }
     }
 }

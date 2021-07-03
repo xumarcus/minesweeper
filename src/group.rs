@@ -18,76 +18,92 @@
 use super::*;
 
 #[derive(Clone, Debug)]
-pub struct Group {
+pub struct Group<'a> {
     knowns: BitVec,
+    solver: &'a Solver,
     unknowns: BitVec,
 }
 
-impl Group {
-    pub fn new(state: &MinesweeperState) -> Self {
-        let mut knowns = bitvec![0; state.size()];
-        let mut unknowns = bitvec![0; state.size()];
+impl<'a> Group<'a> {
+    fn zero(solver: &'a Solver) -> Self {
+        let knowns = bitvec![0; solver.size()];
+        let unknowns = bitvec![0; solver.size()];
+        Self { knowns, solver, unknowns }
+    }
+
+    fn as_option(self) -> Option<Self> {
+        (self.knowns.any() && self.unknowns.any()).then(|| self)
+    }
+
+    pub fn new(solver: &'a Solver, state: &MinesweeperState) -> Option<Self> {
+        let mut group = Group::zero(solver);
         for (idx, status) in state.board().iter().enumerate() {
             match status {
-                Status::Flagged | Status::Marked => continue,
-                Status::Known(_) => knowns.set(idx, true),
-                Status::Unknown => unknowns.set(idx, true)
+                Status::Flagged | Status::Marked | Status::Known(0) => continue,
+                Status::Known(_) => {
+                    let has_unknown = solver.square(idx)
+                        .iter()
+                        .any(|&cidx| state.get(cidx) == Status::Unknown);
+                    if has_unknown {
+                        group.knowns.set(idx, true);
+                    }
+                }
+                Status::Unknown => {
+                    let has_known = solver.square(idx)
+                        .iter()
+                        .any(|&cidx| matches!(state.get(cidx), Status::Known(_)));
+                    if has_known {
+                        group.unknowns.set(idx, true);
+                    }
+                }
             }
         }
-        Self { knowns, unknowns }
+        group.as_option()
+    }
+
+    pub fn count_unknowns(&self) -> usize {
+        self.unknowns.count_ones()
     }
 
     pub fn get(&self, state: &MinesweeperState) -> Option<Index> {
         unimplemented!()
     }
 
-    pub fn knowns(&self) -> &BitVec {
-        &self.knowns
-    }
-
-    pub fn unknowns(&self) -> &BitVec {
-        &self.unknowns
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.unknowns.not_any()
-    }
-
-    pub fn split(mut self, idx: Index, config: &Config) -> (Group, Group) {
-        let mut stack = bitvec![0; config.size()];
-        stack.set(idx, true);
-        let mut other = Group {
-            knowns: bitvec![0; config.size()],
-            unknowns: bitvec![0; config.size()],
-        };
+    pub fn split(mut self, idx: Index) -> (Self, Option<Self>) {
+        self.unknowns.set(idx, false);
+        let mut stack = bitvec![0; self.solver.size()];
+        let mut other = Group::zero(self.solver);
+        if let Some(&sidx) = self.solver.square(idx).iter().filter(|&&cidx| self.knowns[cidx]).next() {
+            stack.set(sidx, true);
+        } else {
+            return (self, None);
+        }
         while let Some(cur) = stack.first_one() {
             stack.set(cur, false);
-            if self.unknowns[cur] {
-                for cidx in config.square(cur) {
-                    if self.knowns[*cidx] {
+            debug_assert_ne!(self.knowns[cur], self.unknowns[cur]);
+            if self.knowns[cur] {
+                for cidx in self.solver.square(cur) {
+                    if self.unknowns[*cidx] {
                         stack.set(*cidx, true);
                     }
                 }
                 self.unknowns.set(cur, false);
                 other.unknowns.set(cur, true);
-            } else {
-                for cidx in config.square(cur) {
-                    if self.knowns[*cidx] || self.unknowns[*cidx] {
+            }
+            if self.unknowns[cur] {
+                for cidx in self.solver.square(cur) {
+                    if self.knowns[*cidx] {
                         stack.set(*cidx, true);
                     }
                 }
-                if self.knowns[cur] {
-                    self.knowns.set(cur, false);
-                    other.knowns.set(cur, true);
-                } else {
-                    log::debug!("Group::split {}", cur);
-                }
+                self.knowns.set(cur, false);
+                other.knowns.set(cur, true);
             }
         }
-        if self.is_empty() {
-            (other, self)
-        } else {
-            (self, other)
+        let s = other.as_option();
+        match self.as_option() {
+            Some(x) => (x, s),
+            x => (s.unwrap(), x)
         }
     }
 }

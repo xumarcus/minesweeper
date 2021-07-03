@@ -41,9 +41,9 @@ pub trait Minesweeper {
         }
         self.set_internal(state)
     }
-    fn solve_next(&mut self) -> MsResult<Option<ScoredIndex>> {
+    fn solve_next(&mut self, solver: &Solver) -> MsResult<Option<ScoredIndex>> {
         let mut state = self.pull()?;
-        let scored_index = solve::solve_next(self.get_config(), &mut state);
+        let scored_index = solver.solve_next(&mut state);
         log::info!("{:?}", scored_index);
         self.push(state)?;
         if let Some((_, idx)) = scored_index {

@@ -17,15 +17,15 @@
 
 use super::*;
 
-pub struct MockMinesweeper<'a> {
+pub struct MockMinesweeper {
     bombs: Vec<bool>,
-    config: &'a Config,
+    config: Config,
     state: MinesweeperState,
 }
 
-impl<'a> MockMinesweeper<'a> {
-    pub fn new(config: &'a Config) -> Self {
-        let state = MinesweeperState::new(config);
+impl MockMinesweeper {
+    pub fn new(config: Config) -> Self {
+        let state = MinesweeperState::new(&config);
         let mut rng = config.new_rng();
         let mut bombs = vec![false; config.size()];
         for _ in 0..config.mines() {
@@ -39,25 +39,9 @@ impl<'a> MockMinesweeper<'a> {
         }
         Self { bombs, config, state }
     }
-
-    fn flood_fill(&mut self, idx: Index) {
-        debug_assert!(matches!(self.state.get(idx), Status::Marked | Status::Unknown));
-        if !self.bombs[idx] {
-            let count = self.config.square(idx).iter().filter(|&&cidx| self.bombs[cidx]).count();
-            self.state.set_known(idx, count);
-            if count != 0 {
-                return;
-            }
-            for cidx in self.config.square(idx) {
-                if matches!(self.state.get(*cidx), Status::Marked | Status::Unknown) {
-                    self.flood_fill(*cidx);
-                }
-            }
-        }
-    }
 }
 
-impl<'a> Minesweeper for MockMinesweeper<'a> {
+impl Minesweeper for MockMinesweeper {
     fn get_bombs(&self) -> Option<&[bool]> {
         Some(&self.bombs)
     }
@@ -81,7 +65,7 @@ impl<'a> Minesweeper for MockMinesweeper<'a> {
 
     fn reveal(&mut self, idx: usize) -> MsResult<()> {
         (!self.bombs[idx])
-            .then(|| self.flood_fill(idx))
+            .then(|| self.state.reveal(idx, &self.bombs, self.config))
             .ok_or(MinesweeperError::RevealedBomb(idx))
     }
 
