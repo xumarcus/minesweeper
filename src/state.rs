@@ -28,13 +28,18 @@ pub struct MinesweeperState {
 impl MinesweeperState {
     pub fn new(config: &Config) -> Self {
         let board = vec![Status::Unknown; config.size()];
-        Self { board, flags_remaining: config.mines(), unknowns: config.size(), knowns: 0 }
+        Self {
+            board,
+            flags_remaining: config.mines(),
+            unknowns: config.size(),
+            knowns: 0,
+        }
     }
 
     pub fn board(&self) -> &[Status] {
         &self.board
     }
-    
+
     #[inline]
     pub fn flags_remaining(&self) -> usize {
         self.flags_remaining
@@ -56,27 +61,28 @@ impl MinesweeperState {
     }
 
     #[inline]
-    pub fn set_flag(&mut self, idx: Index) {
+    pub fn set_flag(&mut self, idx: Index) -> bool {
         debug_assert_eq!(self.board[idx], Status::Unknown);
-        self.board[idx] = Status::Flagged;
-        self.unknowns -= 1;
-        self.flags_remaining -= 1;
+        if self.unknowns > 0 && self.flags_remaining() > 0 {
+            self.board[idx] = Status::Flagged;
+            self.unknowns -= 1;
+            self.flags_remaining -= 1;
+            true
+        } else {
+            false
+        }
     }
 
     #[inline]
-    pub fn set_mark(&mut self, idx: Index) {
+    pub fn set_mark(&mut self, idx: Index) -> bool {
         debug_assert_eq!(self.board[idx], Status::Unknown);
         self.board[idx] = Status::Marked;
-        self.unknowns -= 1;
-    }
-
-    #[inline]
-    pub fn set_known(&mut self, idx: Index, count: usize) {
-        if self.board[idx] == Status::Unknown {
+        if self.unknowns > 0 {
             self.unknowns -= 1;
+            true
+        } else {
+            false
         }
-        self.board[idx] = Status::Known(count);
-        self.knowns += 1;
     }
 
     pub fn filter_status<'a>(
@@ -106,7 +112,11 @@ impl MinesweeperState {
         debug_assert!(matches!(self.get(idx), Status::Marked | Status::Unknown));
         if !bombs[idx] {
             let count = config.square(idx).filter(|&cidx| bombs[cidx]).count();
-            self.set_known(idx, count);
+            if self.board[idx] == Status::Unknown {
+                self.unknowns -= 1;
+            }
+            self.board[idx] = Status::Known(count);
+            self.knowns += 1;
             if count != 0 {
                 return;
             }

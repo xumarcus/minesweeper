@@ -17,11 +17,11 @@
 
 use super::*;
 
-use std::ops::{Add, Mul};
-
-use itertools::{EitherOrBoth, Itertools};
-
-fn index_join<'a, T, F: 'a + Fn(T, T) -> T>(a: Vec<(Index, T)>, b: Vec<(Index, T)>, f: F) -> Vec<(Index, T)> {
+fn index_join<'a, T, F: 'a + Fn(T, T) -> T>(
+    a: Vec<(Index, T)>,
+    b: Vec<(Index, T)>,
+    f: F,
+) -> Vec<(Index, T)> {
     a.into_iter()
         .zip(b.into_iter())
         .map(|((i, x), (j, y))| {
@@ -46,7 +46,9 @@ impl PF {
     }
 
     pub fn zip_with<'a, F: 'a + Fn(R64, R64) -> R64>(&self, rhs: &Self, f: F) -> Self {
-        PF(self.0.iter()
+        PF(self
+            .0
+            .iter()
             .zip(rhs.0.iter())
             .map(|(&x, &y)| f(x, y))
             .collect())
@@ -68,7 +70,7 @@ impl PF {
         let mut pf = PF::new(self.0.len() + rhs.0.len() + 1);
         for (i, &x) in self.0.iter().enumerate() {
             for (j, &y) in rhs.0.iter().enumerate() {
-                pf.0[i + j] += x * y; 
+                pf.0[i + j] += x * y;
             }
         }
         pf
@@ -107,25 +109,27 @@ impl Mul for &PF {
 pub struct Evaluation {
     count: R64,
     spf: PF,
-    ipf: Vec<(Index, PF)>,
+    ipf: Vec<(Index, PF)>,  // TODO one-indexed
 }
 
 impl Evaluation {
     pub fn new(state: &MinesweeperState, idx: Index) -> Self {
-        let spf = match state.get(idx) {
-            Status::Flagged => PF::one_hot(1),
-            Status::Marked => PF::one_hot(0),
+        let count = R64::new(1.0);
+        let (spf, ipf) = match state.get(idx) {
+            Status::Flagged => (PF::one_hot(1), vec![(idx, PF::one_hot(1))]),
+            Status::Marked => (PF::one_hot(0), vec![(idx, PF::new(1))]),
             _ => unreachable!(),
         };
-        let ipf = vec![(idx, spf.clone())];
-        Self { count: R64::new(1.0), spf, ipf }
+        Self { count, spf, ipf }
     }
 
     pub fn label_certains(&self, state: &mut MinesweeperState) {
         for (idx, pf) in &self.ipf {
-            debug_assert!(!pf.0.is_empty());
-            if pf.0.iter().all(|&p| p.raw() == 1.0) {
-                state.set_flag(*idx);
+            debug_assert!(!pf.0.is_empty()); // TODO one-indexed
+            if let Some(s) = pf.0.get(1..) {
+                if !s.is_empty() && s.iter().all(|&p| p.raw() == 1.0) {
+                    state.set_flag(*idx);
+                }
             }
             if pf.0.iter().all(|&p| p.raw() == 0.0) {
                 state.set_mark(*idx);
@@ -138,14 +142,15 @@ impl Add for Evaluation {
     type Output = Self;
     fn add(self, rhs: Self) -> Self {
         let count = self.count + rhs.count;
+        log::debug!("{}", count);
         let p = self.count / count;
         let q = rhs.count / count;
         let f = |c: R64, d: R64| c * p + d * q;
         let g = |x: PF, y: PF| x.zip_with_longest(&y, f, R64::new(0.0));
         Self {
             count,
-            spf: self.spf + rhs.spf,
-            ipf: index_join(self.ipf, rhs.ipf, g)
+            spf: g(self.spf, rhs.spf),
+            ipf: index_join(self.ipf, rhs.ipf, g),
         }
     }
 }
@@ -155,9 +160,13 @@ impl Mul for Evaluation {
     fn mul(self, rhs: Self) -> Self {
         let count = self.count * rhs.count;
         let spf = self.spf.convolve(&rhs.spf);
-        let lhs_ipf = self.ipf.iter()
+        let lhs_ipf = self
+            .ipf
+            .iter()
             .map(|(idx, pf)| (*idx, (pf * &self.spf).convolve(&rhs.spf)));
-        let rhs_ipf = rhs.ipf.iter()
+        let rhs_ipf = rhs
+            .ipf
+            .iter()
             .map(|(idx, pf)| (*idx, (pf * &rhs.spf).convolve(&self.spf)));
         let ipf = lhs_ipf.merge(rhs_ipf).collect();
         Self { count, spf, ipf }

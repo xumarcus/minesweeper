@@ -1,31 +1,21 @@
 // Copyright (C) 2021 Marcus Xu
-// 
+//
 // This file is part of minesweeper.
-// 
+//
 // minesweeper is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
-// 
+//
 // minesweeper is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU General Public License
 // along with minesweeper.  If not, see <http://www.gnu.org/licenses/>.
 
 use super::*;
-
-use std::cmp::{max, min};
-
-use rand::{
-    self,
-    Rng,
-    SeedableRng,
-    distributions::{Distribution, Uniform},
-    rngs::StdRng,
-};
 
 #[derive(Clone, Copy, Debug)]
 pub struct Config {
@@ -41,8 +31,12 @@ impl Config {
             return Err(MinesweeperError::NumberOfMinesOutOfRange);
         }
         let seed = seed.unwrap_or_else(rand::random::<u64>);
-        log::debug!("Create seed {}", seed);
-        Ok(Self { width, length, mines, seed })
+        Ok(Self {
+            width,
+            length,
+            mines,
+            seed,
+        })
     }
 
     #[inline]
@@ -106,7 +100,7 @@ impl Config {
             })
         })
     }
-    
+
     #[rustfmt::skip]
     pub fn from_difficulty(diff: Difficulty, seed: Option<u64>) -> Self {
         let result = match diff {

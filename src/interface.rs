@@ -25,30 +25,4 @@ pub trait Minesweeper {
     fn flag(&mut self, idx: usize) -> MsResult<()>;
     fn reveal(&mut self, idx: usize) -> MsResult<()>;
     fn set_internal(&mut self, state: MinesweeperState) -> MsResult<()>;
-    fn push(&mut self, state: MinesweeperState) -> MsResult<()> {
-        let indices = self
-            .get_state()
-            .board()
-            .iter()
-            .zip(state.board().iter())
-            .enumerate()
-            .filter_map(|(idx, (p, n))| {
-                (p != &Status::Flagged && n == &Status::Flagged).then(|| idx)
-            })
-            .collect::<Vec<Index>>();
-        for idx in indices {
-            self.flag(idx)?;
-        }
-        self.set_internal(state)
-    }
-    fn solve_next(&mut self, solver: &Solver) -> MsResult<Option<ScoredIndex>> {
-        let mut state = self.pull()?;
-        let scored_index = solver.solve_next(&mut state);
-        log::info!("{:?}", scored_index);
-        self.push(state)?;
-        if let Some((_, idx)) = scored_index {
-            self.reveal(idx)?;
-        }
-        Ok(scored_index)
-    }
 }

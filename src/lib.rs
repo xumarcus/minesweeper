@@ -34,7 +34,7 @@ mod mock;
 pub use mock::MockMinesweeper;
 
 mod show;
-pub use show::Show;
+pub use show::ShowMinesweeper;
 
 mod solve;
 pub use solve::Solver;
@@ -42,11 +42,21 @@ pub use solve::Solver;
 mod state;
 use state::MinesweeperState;
 
-use noisy_float::prelude::R64;
-
 use arrayvec::ArrayVec;
-
 use bitvec::prelude::*;
+use itertools::{EitherOrBoth, Itertools};
+use noisy_float::prelude::R64;
+use rand::{
+    self,
+    distributions::{Distribution, Uniform},
+    rngs::StdRng,
+    Rng, SeedableRng,
+};
+use std::cmp::{max, min};
+use std::fmt;
+use std::ops::{Add, Mul};
+use strum_macros::EnumString;
+use thiserror::Error;
 
 type Index = usize;
 type ScoredIndex = (R64, usize);

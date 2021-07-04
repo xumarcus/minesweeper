@@ -15,7 +15,7 @@
 // You should have received a copy of the GNU General Public License
 // along with minesweeper.  If not, see <http://www.gnu.org/licenses/>.
 
-use thiserror::Error;
+use super::*;
 
 #[derive(Clone, Copy, Debug, Error)]
 pub enum MinesweeperError {
@@ -41,9 +41,15 @@ impl Default for Status {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString)]
 pub enum Difficulty {
     Beginner,
     Intermediate,
     Expert,
+}
+
+impl Default for Difficulty {
+    fn default() -> Self {
+        Self::Beginner
+    }
 }

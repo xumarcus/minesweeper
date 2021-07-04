@@ -37,7 +37,11 @@ impl MockMinesweeper {
                 }
             }
         }
-        Self { bombs, config, state }
+        Self {
+            bombs,
+            config,
+            state,
+        }
     }
 }
 
@@ -59,7 +63,8 @@ impl Minesweeper for MockMinesweeper {
     }
 
     fn flag(&mut self, idx: usize) -> MsResult<()> {
-        debug_assert!(self.bombs[idx] && self.state.board()[ idx] != Status::Flagged);
+        debug_assert!(self.bombs[idx]);
+        debug_assert!(self.state.board()[idx] != Status::Flagged);
         Ok(()) // Noop cuz mock
     }
 
