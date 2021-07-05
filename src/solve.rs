@@ -153,6 +153,17 @@ impl Solver {
         Some((R64::new(0.0), idx))
     }
 
+    fn eval_search(&self, state: &MinesweeperState, remainder: &BitVec, eval: &Evaluation) -> Option<ScoredIndex> {
+        let idx = remainder.iter_ones()
+            .min_by_key(|&idx| {
+                let (row, col) = self.config.as_rc(idx);
+                let rd = min(row, self.config.width() - 1 - row);
+                let cd = min(col, self.config.length() - 1 - col);
+                rd + cd
+            });
+        eval.search(state.flags_remaining(), remainder.count_ones(), idx)
+    }
+
     fn solve_state(&self, state: &mut MinesweeperState) -> Option<ScoredIndex> {
         self.corner_search(state)
             .or_else(|| Self::fast_search(state))
@@ -160,12 +171,10 @@ impl Solver {
                 self.make_consistent_all(state).then(|| ())?;
                 Self::fast_search(state).or_else(|| {
                     let (group, remainder) = Group::new(&self, state);
-                    let group = group?;
-                    let eval = self.branching_evaluation(state, &group)?;
-                    log::debug!("{:?}", eval);
+                    let eval = self.branching_evaluation(state, &group?)?;
+                    // log::debug!("{:?}", eval);
                     eval.label(state);
-                    Self::fast_search(state).or_else(|| eval
-                        .probabilistic_search(state.flags_remaining(), &remainder))
+                    Self::fast_search(state).or_else(|| self.eval_search(state, &remainder, &eval))
                 })
             })
     }

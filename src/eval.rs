@@ -187,8 +187,7 @@ impl Evaluation {
         }
     }
 
-    pub fn probabilistic_search(&self, flags: usize, remainder: &BitVec) -> Option<ScoredIndex> {
-        let n = remainder.count_ones();
+    pub fn search(&self, flags: usize, n: usize, idx: Option<Index>) -> Option<ScoredIndex> {
         let iter = self.spf.0.iter().enumerate();
         let mut cpf = PF(iter.filter_map(|(i, p)|  (i <= flags && flags <= n + i).then(|| util::binomial(n, flags - i) * p)).collect());
         cpf.normalize();
@@ -197,8 +196,7 @@ impl Evaluation {
             .iter()
             .map(|(idx, pf)| ((&cpf * pf).0.iter().sum::<R64>(), *idx))
             .inspect(|(p, idx)| log::debug!("{:03} {:.3}", idx, p))
-            .chain(remainder
-                .first_one()
+            .chain(idx
                 .map(|idx| ((R64::new(flags as f64) - *&cpf.ev()) / R64::new(n as f64), idx))
                 .into_iter()
                 .inspect(|(p, _)| log::debug!("Base [{:.3}]", p))

@@ -127,6 +127,24 @@ Expert 22.0% (198 / 901)
 test bench_random_expert       ... bench:   3,191,945 ns/iter (+/- 4,304,412)
 */
 
+/* Iteration 10
+Beginner 87.0% (50897 / 58501)
+test bench_random_beginner     ... bench:      99,077 ns/iter (+/- 26,446)
+Intermediate 70.6% (5933 / 8401)
+test bench_random_intermediate ... bench:     349,275 ns/iter (+/- 160,105)
+Expert 26.2% (551 / 2101)
+test bench_random_expert       ... bench:   1,632,200 ns/iter (+/- 1,509,374)
+*/
+
+/* Iteration 11
+Beginner 89.6% (58313 / 65101)
+test bench_random_beginner     ... bench:      89,592 ns/iter (+/- 20,902)
+Intermediate 72.7% (9161 / 12601)
+test bench_random_intermediate ... bench:     372,555 ns/iter (+/- 162,855)
+Expert 27.1% (569 / 2101)
+test bench_random_expert       ... bench:   1,670,355 ns/iter (+/- 1,689,039)
+*/
+
 use minesweeper::*;
 
 use rand::{
