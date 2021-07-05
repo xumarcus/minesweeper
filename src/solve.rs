@@ -123,7 +123,7 @@ impl Solver {
         let sm = (sm.set_mark(idx) && self.make_consistent_sq(idx, &mut sm))
             .then(|| self.splitting_evaluation(&sm, group))
             .flatten();
-        lift(Evaluation::add)(sf, sm)
+        util::lift(Evaluation::add)(sf, sm)
     }
 
     fn splitting_evaluation(&self, state: &MinesweeperState, group: &Group) -> Option<Evaluation> {
@@ -132,12 +132,7 @@ impl Solver {
         match group {
             Some(group) => group
                 .into_iter()
-                .fold(Some(eval), |eval, split| {
-                    let e1 = self.branching_evaluation(state, &split);
-                    let mut e = eval? * e1?;
-                    e.cap(state.flags_remaining());
-                    Some(e)
-                }),
+                .fold(Some(eval), |eval, split| Some(eval? * self.branching_evaluation(state, &split)?)),
             None => Some(eval),
         }
     }
@@ -166,17 +161,12 @@ impl Solver {
                 self.make_consistent_all(state).then(|| ())?;
                 Self::fast_search(state).or_else(|| {
                     let (group, remainder) = Group::new(&self, state);
-                    let eval = self.branching_evaluation(state, &group?)?;
+                    let group = group?;
+                    let eval = self.branching_evaluation(state, &group)?;
+                    log::debug!("{:?}", eval);
                     eval.label(state);
-                    Self::fast_search(state).or_else(|| {
-                        let dist = Hypergeometric::new(
-                            state.unknowns() as u64,
-                            state.flags_remaining() as u64,
-                            eval.size() as u64,
-                        )
-                        .unwrap();
-                        eval.probabilistic_search(dist, remainder.first_one())
-                    })
+                    Self::fast_search(state).or_else(|| eval
+                        .probabilistic_search(state.flags_remaining(), &remainder))
                 })
             })
     }
@@ -210,12 +200,5 @@ impl Solver {
             drop(x);
         }
         Ok(())
-    }
-}
-
-fn lift<T, F: Fn(T, T) -> T>(f: F) -> impl Fn(Option<T>, Option<T>) -> Option<T> {
-    move |a, b| match (a, b) {
-        (Some(x), Some(y)) => Some(f(x, y)),
-        (a, b) => a.or(b),
     }
 }

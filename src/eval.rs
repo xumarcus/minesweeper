@@ -31,8 +31,21 @@ fn index_join<'a, T, F: 'a + Fn(T, T) -> T>(
         .collect()
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct PF(Vec<R64>);
+
+impl fmt::Debug for PF {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "[")?;
+        for (i, p) in self.0.iter().enumerate() {
+            if p > &R64::new(0.0) {
+                write!(f, "{:02}: {:.3}; ", i, p.raw())?;
+            }
+        }
+        write!(f, "]")?;
+        Ok(())
+    }
+}
 
 impl PF {
     fn new(size: usize) -> Self {
@@ -43,15 +56,6 @@ impl PF {
         let mut pf = PF::new(x + 1);
         pf.0[x] = R64::new(1.0);
         pf
-    }
-
-    fn zip_with<'a, F: 'a + Fn(R64, R64) -> R64>(&self, rhs: &Self, f: F) -> Self {
-        PF(self
-            .0
-            .iter()
-            .zip(rhs.0.iter())
-            .map(|(&x, &y)| f(x, y))
-            .collect())
     }
 
     fn zip_with_longest<'a, F: 'a + Fn(R64, R64) -> R64>(
@@ -118,22 +122,33 @@ impl Add for &PF {
 impl Mul for PF {
     type Output = Self;
     fn mul(self, rhs: Self) -> Self {
-        self.zip_with(&rhs, |x, y| x * y)
+        self.zip_with_longest(&rhs, |x, y| x * y, R64::new(0.0))
     }
 }
 
 impl Mul for &PF {
     type Output = PF;
     fn mul(self, rhs: Self) -> PF {
-        self.zip_with(rhs, |x, y| x * y)
+        self.zip_with_longest(rhs, |x, y| x * y, R64::new(0.0))
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Evaluation {
     count: R64,
     spf: PF,
     ipf: Vec<(Index, PF)>, // @todo one-indexed
+}
+
+impl fmt::Debug for Evaluation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "Count [{}]", self.count)?;
+        writeln!(f, "SPF {:?}", self.spf)?;
+        for (idx, pf) in &self.ipf {
+            writeln!(f, "{:03} {:?}", idx, pf)?;
+        }
+        Ok(())
+    }
 }
 
 impl Evaluation {
@@ -157,11 +172,7 @@ impl Evaluation {
             .collect();
         Self { count, spf, ipf }
     }
-
-    pub fn size(&self) -> usize {
-        self.ipf.len()
-    }
-
+    
     pub fn label(&self, state: &mut MinesweeperState) {
         for (idx, pf) in &self.ipf {
             debug_assert!(!pf.0.is_empty()); // TODO one-indexed
@@ -176,39 +187,23 @@ impl Evaluation {
         }
     }
 
-    pub fn probabilistic_search(
-        &self,
-        dist: Hypergeometric,
-        idx: Option<Index>,
-    ) -> Option<ScoredIndex> {
-        let mut cpf = PF(self
-            .spf
-            .0
-            .iter()
-            .enumerate()
-            .map(|(idx, p)| R64::new(dist.pmf(idx as u64)) * p)
-            .collect());
+    pub fn probabilistic_search(&self, flags: usize, remainder: &BitVec) -> Option<ScoredIndex> {
+        let n = remainder.count_ones();
+        let iter = self.spf.0.iter().enumerate();
+        let mut cpf = PF(iter.filter_map(|(i, p)|  (i <= flags && flags <= n + i).then(|| util::binomial(n, flags - i) * p)).collect());
         cpf.normalize();
+        log::debug!("CPF {:?}", cpf);
         self.ipf
             .iter()
-            .map(|(idx, pf)| ((&cpf * pf).ev(), *idx))
-            .chain(
-                idx.map(|idx| {
-                    let d = dist.population() as f64 - self.size() as f64;
-                    let p = *&cpf.ev() / R64::new(d);
-                    (p, idx)
-                })
-                .into_iter(),
+            .map(|(idx, pf)| ((&cpf * pf).0.iter().sum::<R64>(), *idx))
+            .inspect(|(p, idx)| log::debug!("{:03} {:.3}", idx, p))
+            .chain(remainder
+                .first_one()
+                .map(|idx| ((R64::new(flags as f64) - *&cpf.ev()) / R64::new(n as f64), idx))
+                .into_iter()
+                .inspect(|(p, _)| log::debug!("Base [{:.3}]", p))
             )
             .min()
-    }
-
-    pub fn cap(&mut self, maxf: usize) {
-        self.spf.0.truncate(maxf + 1);
-        self.spf.normalize();
-        for (_, pf) in self.ipf.iter_mut() {
-            pf.0.truncate(maxf + 1);
-        }
     }
 }
 

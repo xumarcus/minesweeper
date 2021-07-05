@@ -76,15 +76,13 @@ impl<'a> Group<'a> {
             let mut knowns = self.zero();
             let mut unknowns = self.zero();
             for idx in group.unknowns.iter_ones() {
-                if let Status::Unknown = state.get(idx) {
-                    if self
+                if matches!(state.get(idx), Status::Unknown) && self
                         .solver
                         .square(idx)
                         .iter()
                         .any(|&cidx| matches!(state.get(cidx), Status::Known(_)))
-                    {
-                        unknowns.set(idx, true);
-                    }
+                {
+                    unknowns.set(idx, true);
                 } else {
                     remainder.set(idx, true);
                 }

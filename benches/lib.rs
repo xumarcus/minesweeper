@@ -110,12 +110,21 @@ test bench_random_expert       ... bench:   5,114,330 ns/iter (+/- 91,891,735)
 */
 
 /* Iteration 8
-Beginner 61.3% (11588 / 18901)
-test bench_random_beginner     ... bench:     290,503 ns/iter (+/- 108,299)
-Intermediate 41.3% (1858 / 4501)
-test bench_random_intermediate ... bench:     742,505 ns/iter (+/- 452,176)
-Expert 10.0% (210 / 2101)
-test bench_random_expert       ... bench:   2,781,187 ns/iter (+/- 2,802,791)
+Beginner 74.0% (7994 / 10801)
+test bench_random_beginner     ... bench:     311,274 ns/iter (+/- 159,716)
+Intermediate 53.4% (2404 / 4501)
+test bench_random_intermediate ... bench:     973,157 ns/iter (+/- 661,961)
+Expert 13.3% (120 / 901)
+test bench_random_expert       ... bench:   3,324,790 ns/iter (+/- 3,694,704)
+*/
+
+/* Iteration 9
+Beginner 80.8% (16973 / 21001)
+test bench_random_beginner     ... bench:     289,824 ns/iter (+/- 121,032)
+Intermediate 62.7% (2633 / 4201)
+test bench_random_intermediate ... bench:     867,891 ns/iter (+/- 661,720)
+Expert 22.0% (198 / 901)
+test bench_random_expert       ... bench:   3,191,945 ns/iter (+/- 4,304,412)
 */
 
 use minesweeper::*;
