@@ -31,7 +31,7 @@ impl MockMinesweeper {
         for _ in 0..config.mines() {
             loop {
                 let idx = config.random_index(&mut rng);
-                if idx != config.center() && !bombs[idx] {
+                if idx != 0 && !bombs[idx] {
                     bombs[idx] = true;
                     break;
                 }

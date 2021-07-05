@@ -137,12 +137,11 @@ impl Solver {
         }
     }
 
-    fn center_search(&self, state: &MinesweeperState) -> Option<ScoredIndex> {
-        let center = self.config.center();
-        match state.get(center) {
+    fn corner_search(&self, state: &MinesweeperState) -> Option<ScoredIndex> {
+        match state.get(0) {
             Status::Known(_) => None,
             Status::Flagged | Status::Marked => unreachable!(),
-            _ => Some((R64::new(0.0), center)),
+            _ => Some((R64::new(0.0), 0)),
         }
     }
 
@@ -155,7 +154,7 @@ impl Solver {
     }
 
     fn solve_state(&self, state: &mut MinesweeperState) -> Option<ScoredIndex> {
-        self.center_search(state)
+        self.corner_search(state)
             .or_else(|| Self::fast_search(state))
             .or_else(|| {
                 self.make_consistent_all(state).then(|| ())?;

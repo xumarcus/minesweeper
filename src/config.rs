@@ -70,11 +70,6 @@ impl Config {
     }
 
     #[inline]
-    pub fn center(&self) -> Index {
-        self.from_rc(self.width() / 2, self.length() / 2)
-    }
-
-    #[inline]
     pub fn new_rng(&self) -> impl Rng {
         StdRng::seed_from_u64(self.seed)
     }
