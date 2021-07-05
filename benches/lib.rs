@@ -109,6 +109,15 @@ Expert 26.9% (81 / 301)
 test bench_random_expert       ... bench:   5,114,330 ns/iter (+/- 91,891,735)
 */
 
+/* Iteration 8
+Beginner 61.3% (11588 / 18901)
+test bench_random_beginner     ... bench:     290,503 ns/iter (+/- 108,299)
+Intermediate 41.3% (1858 / 4501)
+test bench_random_intermediate ... bench:     742,505 ns/iter (+/- 452,176)
+Expert 10.0% (210 / 2101)
+test bench_random_expert       ... bench:   2,781,187 ns/iter (+/- 2,802,791)
+*/
+
 use minesweeper::*;
 
 use rand::{
@@ -124,16 +133,12 @@ fn bench_random(diff: Difficulty, b: &mut Bencher) {
     let mut solved = 0;
     b.iter(|| {
         let seed = initial_seed + n;
-        let inst = MockMinesweeper::from_difficulty(diff, Some(seed));
-        match std::panic::catch_unwind(|| Solver::new(inst).solve()) {
-            Err(_) => unreachable!("Panicked [Seed {}]", seed),
-            Ok(res) => match res {
-                Err(MinesweeperError::RevealedBomb(_)) => (),
-                Err(x) => unreachable!("{} [Seed {}]", x, seed),
-                Ok(()) => {
-                    solved += 1;
-                }
-            },
+        let config = Config::from_difficulty(diff, Some(seed));
+        let solver = Solver::new(config);
+        match std::panic::catch_unwind(|| solver.solve(&mut MockMinesweeper::new(config))) {
+            Ok(Err(MinesweeperError::RevealedBomb(_))) => (),
+            Ok(Ok(())) => solved += 1,
+            x => unreachable!("{:?} [Seed {}]", x, seed)
         }
         n += 1;
     });

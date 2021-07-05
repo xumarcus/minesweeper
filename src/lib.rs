@@ -52,6 +52,7 @@ use rand::{
     rngs::StdRng,
     Rng, SeedableRng,
 };
+use statrs::distribution::{Discrete, Hypergeometric};
 use std::cmp::{max, min};
 use std::fmt;
 use std::ops::{Add, Mul};

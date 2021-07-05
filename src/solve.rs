@@ -43,6 +43,18 @@ impl Solver {
         &self.squares[idx]
     }
 
+    #[allow(dead_code)]
+    fn debug(&self, state: &MinesweeperState) {
+        log::debug!(
+            "{}",
+            ShowState {
+                bombs: None,
+                state,
+                config: &self.config
+            }
+        );
+    }
+
     fn square_of<'a, F: 'static + Fn(Status) -> bool>(
         &'a self,
         state: &'a MinesweeperState,
@@ -99,60 +111,34 @@ impl Solver {
         (0..self.size()).all(|cidx| self.make_consistent(cidx, state))
     }
 
-    fn evaluate_branch(&self, state: MinesweeperState, mut group: Group) -> Option<Evaluation> {
-        let idx = group.pop()?; // TODO
-        log::debug!("{}", idx);
-        let (s0, s1) = group.split(idx);
+    fn branching_evaluation(&self, state: &MinesweeperState, group: &Group) -> Option<Evaluation> {
+        let idx = group.get()?;
         let mut sf = state.clone();
-        let mut sm = state.clone(); // move
-                                    // Short circuiting
-        let sf = (sf.set_flag(idx) && self.make_consistent_sq(idx, &mut sf)).then(|| sf);
-        let sm = (sm.set_mark(idx) && self.make_consistent_sq(idx, &mut sm)).then(|| sm);
-        match (sf, sm) {
-            (Some(sf), Some(sm)) => {
-                match (
-                    self.evaluate_splitted(idx, sf, s0.clone(), s1.clone()),
-                    self.evaluate_splitted(idx, sm, s0, s1),
-                ) {
-                    (Some(e0), Some(e1)) => Some(e0 + e1),
-                    (e0, e1) => e0.or(e1),
-                }
-            }
-            (sf, sm) => sf
-                .or(sm)
-                .and_then(|st| self.evaluate_splitted(idx, st, s0, s1)),
-        }
+        let mut sm = state.clone();
+
+        // Short circuiting
+        let sf = (sf.set_flag(idx) && self.make_consistent_sq(idx, &mut sf))
+            .then(|| self.splitting_evaluation(&sf, group))
+            .flatten();
+        let sm = (sm.set_mark(idx) && self.make_consistent_sq(idx, &mut sm))
+            .then(|| self.splitting_evaluation(&sm, group))
+            .flatten();
+        lift(Evaluation::add)(sf, sm)
     }
 
-    fn evaluate_splitted(
-        &self,
-        idx: Index,
-        state: MinesweeperState,
-        s0: Option<Group>,
-        s1: Option<Group>,
-    ) -> Option<Evaluation> {
-        log::debug!("{}", ShowState { bombs: None, config: &self.config, state: &state });
-        log::debug!("{:?}", s0);
-        log::debug!("{:?}", s1);
-        let es = Evaluation::new(&state, idx);
-        match (
-            s0.and_then(|s| s.trimmed(&state)),
-            s1.and_then(|s| s.trimmed(&state)),
-        ) {
-            (Some(s0), Some(s1)) => {
-                let e0 = self.evaluate_branch(state.clone(), s0)?;
-                let e1 = self.evaluate_branch(state.clone(), s1)?;
-                Some(es * e0 * e1)
-            }
-            (s0, s1) => {
-                log::debug!("{:?}", s0);
-                log::debug!("{:?}", s1);
-                if let Some(s) = s0.or(s1) {
-                    Some(es * self.evaluate_branch(state, s)?)
-                } else {
-                    Some(es)
-                }
-            }
+    fn splitting_evaluation(&self, state: &MinesweeperState, group: &Group) -> Option<Evaluation> {
+        let (group, remainder) = group.trim(state);
+        let eval = Evaluation::new(state, remainder);
+        match group {
+            Some(group) => group
+                .into_iter()
+                .fold(Some(eval), |eval, split| {
+                    let e1 = self.branching_evaluation(state, &split);
+                    let mut e = eval? * e1?;
+                    e.cap(state.flags_remaining());
+                    Some(e)
+                }),
+            None => Some(eval),
         }
     }
 
@@ -179,13 +165,18 @@ impl Solver {
             .or_else(|| {
                 self.make_consistent_all(state).then(|| ())?;
                 Self::fast_search(state).or_else(|| {
-                    let group = Group::new(&self, state)?;
-                    let unknowns_count = group.count_unknowns();
-                    log::debug!("{:?}", group);
-                    let eval = self.evaluate_branch(state.clone(), group)?;
-                    log::info!("{:?}", eval);
-                    eval.label_certains(state);
-                    Self::fast_search(state)
+                    let (group, remainder) = Group::new(&self, state);
+                    let eval = self.branching_evaluation(state, &group?)?;
+                    eval.label(state);
+                    Self::fast_search(state).or_else(|| {
+                        let dist = Hypergeometric::new(
+                            state.unknowns() as u64,
+                            state.flags_remaining() as u64,
+                            eval.size() as u64,
+                        )
+                        .unwrap();
+                        eval.probabilistic_search(dist, remainder.first_one())
+                    })
                 })
             })
     }
@@ -222,11 +213,9 @@ impl Solver {
     }
 }
 
-/*
 fn lift<T, F: Fn(T, T) -> T>(f: F) -> impl Fn(Option<T>, Option<T>) -> Option<T> {
     move |a, b| match (a, b) {
         (Some(x), Some(y)) => Some(f(x, y)),
         (a, b) => a.or(b),
     }
 }
-*/

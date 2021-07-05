@@ -29,7 +29,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or_default();
     let seed = env::args().nth(2).and_then(|s| s.parse::<u64>().ok());
     let logger = match seed {
-        None => SimpleLogger::new().with_level(log::LevelFilter::Debug),
+        None => SimpleLogger::new().with_level(log::LevelFilter::Info),
         _ => SimpleLogger::new(),
     };
     logger.init()?;

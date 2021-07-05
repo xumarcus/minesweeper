@@ -35,17 +35,17 @@ fn index_join<'a, T, F: 'a + Fn(T, T) -> T>(
 struct PF(Vec<R64>);
 
 impl PF {
-    pub fn new(size: usize) -> Self {
+    fn new(size: usize) -> Self {
         PF(vec![R64::new(0.0); size])
     }
 
-    pub fn one_hot(x: usize) -> Self {
+    fn one_hot(x: usize) -> Self {
         let mut pf = PF::new(x + 1);
         pf.0[x] = R64::new(1.0);
         pf
     }
 
-    pub fn zip_with<'a, F: 'a + Fn(R64, R64) -> R64>(&self, rhs: &Self, f: F) -> Self {
+    fn zip_with<'a, F: 'a + Fn(R64, R64) -> R64>(&self, rhs: &Self, f: F) -> Self {
         PF(self
             .0
             .iter()
@@ -54,19 +54,25 @@ impl PF {
             .collect())
     }
 
-    #[rustfmt::skip]
-    pub fn zip_with_longest<'a, F: 'a + Fn(R64, R64) -> R64>(&self, rhs: &Self, f: F, default: R64) -> Self {
-        PF(self.0.iter()
+    fn zip_with_longest<'a, F: 'a + Fn(R64, R64) -> R64>(
+        &self,
+        rhs: &Self,
+        f: F,
+        default: R64,
+    ) -> Self {
+        PF(self
+            .0
+            .iter()
             .zip_longest(rhs.0.iter())
             .map(|either| match either {
                 EitherOrBoth::Both(&c, &d) => f(c, d),
-                EitherOrBoth::Left(&c)     => f(c, default),
-                EitherOrBoth::Right(&d)    => f(default, d),
+                EitherOrBoth::Left(&c) => f(c, default),
+                EitherOrBoth::Right(&d) => f(default, d),
             })
             .collect())
     }
 
-    pub fn convolve(&self, rhs: &Self) -> Self {
+    fn convolve(&self, rhs: &Self) -> Self {
         let mut pf = PF::new(self.0.len() + rhs.0.len() + 1);
         for (i, &x) in self.0.iter().enumerate() {
             for (j, &y) in rhs.0.iter().enumerate() {
@@ -74,6 +80,24 @@ impl PF {
             }
         }
         pf
+    }
+
+    pub fn ev(&self) -> R64 {
+        self.0
+            .iter()
+            .enumerate()
+            .map(|(idx, &p)| p * R64::new(idx as f64))
+            .sum::<R64>()
+    }
+
+    // Precision?
+    fn normalize(&mut self) {
+        let s = self.0.iter().sum::<R64>();
+        if s > R64::new(0.0) {
+            for p in self.0.iter_mut() {
+                *p *= R64::new(1.0) / s;
+            }
+        }
     }
 }
 
@@ -109,31 +133,81 @@ impl Mul for &PF {
 pub struct Evaluation {
     count: R64,
     spf: PF,
-    ipf: Vec<(Index, PF)>,  // TODO one-indexed
+    ipf: Vec<(Index, PF)>, // @todo one-indexed
 }
 
 impl Evaluation {
-    pub fn new(state: &MinesweeperState, idx: Index) -> Self {
+    pub fn new(state: &MinesweeperState, remainder: BitVec) -> Self {
         let count = R64::new(1.0);
-        let (spf, ipf) = match state.get(idx) {
-            Status::Flagged => (PF::one_hot(1), vec![(idx, PF::one_hot(1))]),
-            Status::Marked => (PF::one_hot(0), vec![(idx, PF::new(1))]),
-            _ => unreachable!(),
-        };
+        let flags = remainder
+            .iter_ones()
+            .filter(|&idx| matches!(state.get(idx), Status::Flagged))
+            .count();
+        let spf = PF::one_hot(flags);
+        let ipf = remainder
+            .iter_ones()
+            .map(|idx| {
+                let pf = match state.get(idx) {
+                    Status::Flagged => PF::one_hot(flags),
+                    Status::Marked => PF::new(1), // @todo one-indexed
+                    _ => unreachable!(),
+                };
+                (idx, pf)
+            })
+            .collect();
         Self { count, spf, ipf }
     }
 
-    pub fn label_certains(&self, state: &mut MinesweeperState) {
+    pub fn size(&self) -> usize {
+        self.ipf.len()
+    }
+
+    pub fn label(&self, state: &mut MinesweeperState) {
         for (idx, pf) in &self.ipf {
             debug_assert!(!pf.0.is_empty()); // TODO one-indexed
             if let Some(s) = pf.0.get(1..) {
-                if !s.is_empty() && s.iter().all(|&p| p.raw() == 1.0) {
+                if !s.is_empty() && s.iter().all(|&p| p == R64::new(1.0)) {
                     state.set_flag(*idx);
                 }
             }
-            if pf.0.iter().all(|&p| p.raw() == 0.0) {
+            if pf.0.iter().all(|&p| p == R64::new(0.0)) {
                 state.set_mark(*idx);
             }
+        }
+    }
+
+    pub fn probabilistic_search(
+        &self,
+        dist: Hypergeometric,
+        idx: Option<Index>,
+    ) -> Option<ScoredIndex> {
+        let mut cpf = PF(self
+            .spf
+            .0
+            .iter()
+            .enumerate()
+            .map(|(idx, p)| R64::new(dist.pmf(idx as u64)) * p)
+            .collect());
+        cpf.normalize();
+        self.ipf
+            .iter()
+            .map(|(idx, pf)| ((&cpf * pf).ev(), *idx))
+            .chain(
+                idx.map(|idx| {
+                    let d = dist.population() as f64 - self.size() as f64;
+                    let p = *&cpf.ev() / R64::new(d);
+                    (p, idx)
+                })
+                .into_iter(),
+            )
+            .min()
+    }
+
+    pub fn cap(&mut self, maxf: usize) {
+        self.spf.0.truncate(maxf + 1);
+        self.spf.normalize();
+        for (_, pf) in self.ipf.iter_mut() {
+            pf.0.truncate(maxf + 1);
         }
     }
 }
@@ -142,7 +216,6 @@ impl Add for Evaluation {
     type Output = Self;
     fn add(self, rhs: Self) -> Self {
         let count = self.count + rhs.count;
-        log::debug!("{}", count);
         let p = self.count / count;
         let q = rhs.count / count;
         let f = |c: R64, d: R64| c * p + d * q;
