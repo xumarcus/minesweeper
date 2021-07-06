@@ -18,19 +18,22 @@
 use super::*;
 
 pub struct ShowState<'a> {
-    pub bombs: Option<&'a [bool]>,
-    pub config: &'a Config,
-    pub state: &'a MinesweeperState,
+    bombs: Option<&'a [bool]>,
+    config: &'a Config,
+    state: &'a MinesweeperState,
+}
+
+impl <'a> ShowState<'a> {
+    #[allow(dead_code)]
+    pub fn from_state(config: &'a Config, state: &'a MinesweeperState) -> Self {
+        Self { bombs: None, config, state }
+    }
 }
 
 impl<'a> fmt::Display for ShowState<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(
-            f,
-            "[Remain {:02} flags] {:?}",
-            self.state.flags_remaining(),
-            self.config
-        )?;
+        let flags = self.state.flags_remaining();
+        writeln!(f, "[Remain {:02} flags] {:?}", flags, self.config)?;
         for (idx, status) in self.state.board().iter().enumerate() {
             if idx % self.config.length() == 0 {
                 write!(f, "\n")?;

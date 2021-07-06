@@ -33,6 +33,9 @@ pub use interface::Minesweeper;
 mod mock;
 pub use mock::MockMinesweeper;
 
+mod pf;
+use pf::PF;
+
 mod show;
 pub use show::ShowMinesweeper;
 

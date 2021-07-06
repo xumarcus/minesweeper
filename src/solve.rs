@@ -17,8 +17,6 @@
 
 use super::*;
 
-use show::ShowState;
-
 #[derive(Clone, Debug)]
 pub struct Solver {
     config: Config,
@@ -41,18 +39,6 @@ impl Solver {
 
     pub fn square(&self, idx: Index) -> &[Index] {
         &self.squares[idx]
-    }
-
-    #[allow(dead_code)]
-    fn debug(&self, state: &MinesweeperState) {
-        log::debug!(
-            "{}",
-            ShowState {
-                bombs: None,
-                state,
-                config: &self.config
-            }
-        );
     }
 
     fn square_of<'a, F: 'static + Fn(Status) -> bool>(
@@ -153,34 +139,33 @@ impl Solver {
         Some((R64::new(0.0), idx))
     }
 
-    fn eval_search(
-        &self,
-        state: &MinesweeperState,
-        remainder: &BitVec,
-        eval: &Evaluation,
-    ) -> Option<ScoredIndex> {
-        let idx = remainder.iter_ones().min_by_key(|&idx| {
-            let (row, col) = self.config.as_rc(idx);
-            let rd = min(row, self.config.width() - 1 - row);
-            let cd = min(col, self.config.length() - 1 - col);
-            rd + cd
-        });
-        eval.search(state.flags_remaining(), remainder.count_ones(), idx)
-    }
-
     fn solve_state(&self, state: &mut MinesweeperState) -> Option<ScoredIndex> {
-        self.corner_search(state)
-            .or_else(|| Self::fast_search(state))
-            .or_else(|| {
-                self.make_consistent_all(state).then(|| ())?;
-                Self::fast_search(state).or_else(|| {
-                    let (group, remainder) = Group::new(&self, state);
-                    let eval = self.branching_evaluation(state, &group?)?;
-                    // log::debug!("{:?}", eval);
-                    eval.label(state);
-                    Self::fast_search(state).or_else(|| self.eval_search(state, &remainder, &eval))
+        util::catch(move || {
+            util::wrap(self.corner_search(state))?;
+            util::wrap(Self::fast_search(state))?;
+            util::guard(self.make_consistent_all(state))?;
+            util::wrap(Self::fast_search(state))?;
+            let (group, remainder) = Group::new(&self, state);
+            let eval = util::guard_from(|| self.branching_evaluation(state, group.as_ref()?))?;
+            eval.label(state);
+            util::wrap(Self::fast_search(state))?;
+            let (bp, ps) = eval.to_probabilities(state.flags_remaining(), remainder.count_ones());
+            let alt = remainder
+                .iter_ones()
+                .min_by_key(|&idx| {
+                    self.square_of(state, idx, |status| matches!(status, Status::Unknown)).count()
+                    // self.square(idx).iter().filter(|&&cidx| remainder[cidx]).count()
+                    /*
+                    let (row, col) = self.config.as_rc(idx);
+                    let rd = min(row, self.config.width() - 1 - row);
+                    let cd = min(col, self.config.length() - 1 - col);
+                    rd + cd
+                    */
                 })
-            })
+                .and_then(|idx| Some((R64::new(0.0) * bp?, idx)));
+            util::wrap(ps.chain(alt.into_iter()).min())?;
+            Ok(())
+        })
     }
 
     pub fn solve_next<T: Minesweeper>(&self, sweep: &mut T) -> MsResult<Option<ScoredIndex>> {

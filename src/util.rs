@@ -30,3 +30,29 @@ pub fn lift<T, F: Fn(T, T) -> T>(f: F) -> impl Fn(Option<T>, Option<T>) -> Optio
         (a, b) => a.or(b),
     }
 }
+
+pub fn wrap<T>(x: Option<T>) -> Result<(), Option<T>> {
+    match x {
+        None => Ok(()),
+        x => Err(x),
+    }
+}
+
+pub fn guard<T>(x: bool) -> Result<(), Option<T>> {
+    if x {
+        Ok(())
+    } else {
+        Err(None)
+    }
+}
+
+pub fn guard_from<T, U>(mut f: impl FnMut() -> Option<T>) -> Result<T, Option<U>> {
+    match f() {
+        None => Err(None),
+        Some(x) => Ok(x)
+    }
+}
+
+pub fn catch<T>(mut f: impl FnMut() -> Result<(), Option<T>>) -> Option<T> {
+    f().err().flatten()
+}
