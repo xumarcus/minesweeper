@@ -165,7 +165,7 @@ fn bench_random(diff: Difficulty, b: &mut Bencher) {
         match std::panic::catch_unwind(|| solver.solve(&mut MockMinesweeper::new(config))) {
             Ok(Err(MinesweeperError::RevealedBomb(_))) => (),
             Ok(Ok(())) => solved += 1,
-            x => unreachable!("{:?} [Seed {}]", x, seed)
+            x => unreachable!("{:?} [Seed {}]", x, seed),
         }
         n += 1;
     });

@@ -172,7 +172,7 @@ impl Evaluation {
             .collect();
         Self { count, spf, ipf }
     }
-    
+
     pub fn label(&self, state: &mut MinesweeperState) {
         for (idx, pf) in &self.ipf {
             debug_assert!(!pf.0.is_empty()); // TODO one-indexed
@@ -189,17 +189,26 @@ impl Evaluation {
 
     pub fn search(&self, flags: usize, n: usize, idx: Option<Index>) -> Option<ScoredIndex> {
         let iter = self.spf.0.iter().enumerate();
-        let mut cpf = PF(iter.filter_map(|(i, p)|  (i <= flags && flags <= n + i).then(|| util::binomial(n, flags - i) * p)).collect());
+        let mut cpf = PF(iter
+            .filter_map(|(i, p)| {
+                (i <= flags && flags <= n + i).then(|| util::binomial(n, flags - i) * p)
+            })
+            .collect());
         cpf.normalize();
         log::debug!("CPF {:?}", cpf);
         self.ipf
             .iter()
             .map(|(idx, pf)| ((&cpf * pf).0.iter().sum::<R64>(), *idx))
             .inspect(|(p, idx)| log::debug!("{:03} {:.3}", idx, p))
-            .chain(idx
-                .map(|idx| ((R64::new(flags as f64) - *&cpf.ev()) / R64::new(n as f64), idx))
+            .chain(
+                idx.map(|idx| {
+                    (
+                        (R64::new(flags as f64) - *&cpf.ev()) / R64::new(n as f64),
+                        idx,
+                    )
+                })
                 .into_iter()
-                .inspect(|(p, _)| log::debug!("Base [{:.3}]", p))
+                .inspect(|(p, _)| log::debug!("Base [{:.3}]", p)),
             )
             .min()
     }

@@ -130,9 +130,9 @@ impl Solver {
         let (group, remainder) = group.trim(state);
         let eval = Evaluation::new(state, remainder);
         match group {
-            Some(group) => group
-                .into_iter()
-                .fold(Some(eval), |eval, split| Some(eval? * self.branching_evaluation(state, &split)?)),
+            Some(group) => group.into_iter().fold(Some(eval), |eval, split| {
+                Some(eval? * self.branching_evaluation(state, &split)?)
+            }),
             None => Some(eval),
         }
     }
@@ -153,14 +153,18 @@ impl Solver {
         Some((R64::new(0.0), idx))
     }
 
-    fn eval_search(&self, state: &MinesweeperState, remainder: &BitVec, eval: &Evaluation) -> Option<ScoredIndex> {
-        let idx = remainder.iter_ones()
-            .min_by_key(|&idx| {
-                let (row, col) = self.config.as_rc(idx);
-                let rd = min(row, self.config.width() - 1 - row);
-                let cd = min(col, self.config.length() - 1 - col);
-                rd + cd
-            });
+    fn eval_search(
+        &self,
+        state: &MinesweeperState,
+        remainder: &BitVec,
+        eval: &Evaluation,
+    ) -> Option<ScoredIndex> {
+        let idx = remainder.iter_ones().min_by_key(|&idx| {
+            let (row, col) = self.config.as_rc(idx);
+            let rd = min(row, self.config.width() - 1 - row);
+            let cd = min(col, self.config.length() - 1 - col);
+            rd + cd
+        });
         eval.search(state.flags_remaining(), remainder.count_ones(), idx)
     }
 

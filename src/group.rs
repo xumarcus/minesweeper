@@ -76,7 +76,8 @@ impl<'a> Group<'a> {
             let mut knowns = self.zero();
             let mut unknowns = self.zero();
             for idx in group.unknowns.iter_ones() {
-                if matches!(state.get(idx), Status::Unknown) && self
+                if matches!(state.get(idx), Status::Unknown)
+                    && self
                         .solver
                         .square(idx)
                         .iter()
