@@ -23,10 +23,14 @@ pub struct ShowState<'a> {
     state: &'a MinesweeperState,
 }
 
-impl <'a> ShowState<'a> {
+impl<'a> ShowState<'a> {
     #[allow(dead_code)]
     pub fn from_state(config: &'a Config, state: &'a MinesweeperState) -> Self {
-        Self { bombs: None, config, state }
+        Self {
+            bombs: None,
+            config,
+            state,
+        }
     }
 }
 

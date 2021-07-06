@@ -153,7 +153,8 @@ impl Solver {
             let alt = remainder
                 .iter_ones()
                 .min_by_key(|&idx| {
-                    self.square_of(state, idx, |status| matches!(status, Status::Unknown)).count()
+                    self.square_of(state, idx, |status| matches!(status, Status::Unknown))
+                        .count()
                     // self.square(idx).iter().filter(|&&cidx| remainder[cidx]).count()
                     /*
                     let (row, col) = self.config.as_rc(idx);

@@ -49,7 +49,7 @@ pub fn guard<T>(x: bool) -> Result<(), Option<T>> {
 pub fn guard_from<T, U>(mut f: impl FnMut() -> Option<T>) -> Result<T, Option<U>> {
     match f() {
         None => Err(None),
-        Some(x) => Ok(x)
+        Some(x) => Ok(x),
     }
 }
 

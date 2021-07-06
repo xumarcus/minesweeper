@@ -61,16 +61,19 @@ impl Evaluation {
         self.ipf.iter().all(|(idx, pf)| pf.label(state, *idx))
     }
 
-    pub fn to_probabilities(&self, flags: usize, n: usize) -> (Option<R64>, impl Iterator<Item = ScoredIndex> + '_) {
+    pub fn to_probabilities(
+        &self,
+        flags: usize,
+        n: usize,
+    ) -> (Option<R64>, impl Iterator<Item = ScoredIndex> + '_) {
         let mut weighted_spf = self.spf.clone();
         weighted_spf.weighted(flags, n);
-        let bp = (n != 0).then(|| (R64::new(flags as f64) - *&weighted_spf.ev()) / R64::new(n as f64));
-        let ps = self.ipf
-            .iter()
-            .map(move |(idx, pf)| {
-                let p = (&weighted_spf * pf).sum();
-                (p, *idx)
-            });
+        let bp =
+            (n != 0).then(|| (R64::new(flags as f64) - *&weighted_spf.ev()) / R64::new(n as f64));
+        let ps = self.ipf.iter().map(move |(idx, pf)| {
+            let p = (&weighted_spf * pf).sum();
+            (p, *idx)
+        });
         (bp, ps)
     }
 }
@@ -81,9 +84,12 @@ impl Add for Evaluation {
         let count = self.count + rhs.count;
         let p = self.count / count;
         let q = rhs.count / count;
-        let g = |x: PF, y: PF| x.zip_with_longest(&y, |c: R64, d: R64| c * p + d * q, R64::new(0.0));
+        let g =
+            |x: PF, y: PF| x.zip_with_longest(&y, |c: R64, d: R64| c * p + d * q, R64::new(0.0));
         let spf = g(self.spf, rhs.spf);
-        let ipf = self.ipf.into_iter()
+        let ipf = self
+            .ipf
+            .into_iter()
             .zip(rhs.ipf.into_iter())
             .map(|((i, x), (j, y))| {
                 debug_assert_eq!(i, j);
