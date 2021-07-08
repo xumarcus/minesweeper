@@ -40,21 +40,16 @@ impl PF {
         PF(v)
     }
 
-    pub fn zip_with_longest<'a, F: 'a + Fn(R64, R64) -> R64>(
+    pub fn zip_with_longest<'a, F: 'a + Fn(EitherOrBoth<&R64, &R64>) -> R64>(
         &self,
         rhs: &Self,
         f: F,
-        default: R64,
     ) -> Self {
         PF(self
             .0
             .iter()
             .zip_longest(rhs.0.iter())
-            .map(|either| match either {
-                EitherOrBoth::Both(&c, &d) => f(c, d),
-                EitherOrBoth::Left(&c) => f(c, default),
-                EitherOrBoth::Right(&d) => f(default, d),
-            })
+            .map(f)
             .collect())
     }
 
@@ -121,27 +116,61 @@ impl Default for PF {
 impl Add for PF {
     type Output = Self;
     fn add(self, rhs: Self) -> Self {
-        self.zip_with_longest(&rhs, |x, y| x + y, R64::new(0.0))
+        self.zip_with_longest(&rhs, |either| match either {
+            EitherOrBoth::Both(&c, &d) => c + d,
+            EitherOrBoth::Left(&c) => c,
+            EitherOrBoth::Right(&d) => d,
+        })
     }
 }
 
 impl Add for &PF {
     type Output = PF;
     fn add(self, rhs: Self) -> PF {
-        self.zip_with_longest(rhs, |x, y| x + y, R64::new(0.0))
+        self.zip_with_longest(rhs, |either| match either {
+            EitherOrBoth::Both(&c, &d) => c + d,
+            EitherOrBoth::Left(&c) => c,
+            EitherOrBoth::Right(&d) => d,
+        })
     }
 }
 
 impl Mul for PF {
     type Output = Self;
     fn mul(self, rhs: Self) -> Self {
-        self.zip_with_longest(&rhs, |x, y| x * y, R64::new(0.0))
+        self.zip_with_longest(&rhs, |either| match either {
+            EitherOrBoth::Both(&c, &d) => c * d,
+            _ => R64::new(0.0),
+        })
     }
 }
 
 impl Mul for &PF {
     type Output = PF;
     fn mul(self, rhs: Self) -> PF {
-        self.zip_with_longest(rhs, |x, y| x * y, R64::new(0.0))
+        self.zip_with_longest(rhs, |either| match either {
+            EitherOrBoth::Both(&c, &d) => c * d,
+            _ => R64::new(0.0),
+        })
+    }
+}
+
+impl Div for PF {
+    type Output = Self;
+    fn div(self, rhs: Self) -> Self {
+        self.zip_with_longest(&rhs, |either| match either {
+            EitherOrBoth::Both(&c, &d) if d != R64::new(0.0) => c / d,
+            _ => R64::new(0.0),
+        })
+    }
+}
+
+impl Div for &PF {
+    type Output = PF;
+    fn div(self, rhs: Self) -> PF {
+        self.zip_with_longest(&rhs, |either| match either {
+            EitherOrBoth::Both(&c, &d) if d != R64::new(0.0) => c / d,
+            _ => R64::new(0.0),
+        })
     }
 }

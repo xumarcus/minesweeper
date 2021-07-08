@@ -50,7 +50,7 @@ mod util;
 use arrayvec::ArrayVec;
 use bitvec::prelude::*;
 use itertools::{EitherOrBoth, Itertools};
-use noisy_float::prelude::R64;
+use noisy_float::prelude::*;
 use rand::{
     self,
     distributions::{Distribution, Uniform},
@@ -59,7 +59,7 @@ use rand::{
 };
 use std::cmp::{max, min};
 use std::fmt;
-use std::ops::{Add, Mul};
+use std::ops::{Add, Mul, Div};
 use strum_macros::EnumString;
 use thiserror::Error;
 

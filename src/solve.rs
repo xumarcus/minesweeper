@@ -149,22 +149,28 @@ impl Solver {
             let eval = util::guard_from(|| self.branching_evaluation(state, group.as_ref()?))?;
             eval.label(state);
             util::wrap(Self::fast_search(state))?;
+            log::debug!("{:?}", eval);
+
+            let mut v = vec![None; self.size()];
             let (bp, ps) = eval.to_probabilities(state.flags_remaining(), remainder.count_ones());
-            let alt = remainder
-                .iter_ones()
-                .min_by_key(|&idx| {
-                    self.square_of(state, idx, |status| matches!(status, Status::Unknown))
-                        .count()
-                    // self.square(idx).iter().filter(|&&cidx| remainder[cidx]).count()
-                    /*
-                    let (row, col) = self.config.as_rc(idx);
-                    let rd = min(row, self.config.width() - 1 - row);
-                    let cd = min(col, self.config.length() - 1 - col);
-                    rd + cd
-                    */
+            for (p, idx) in ps {
+                v[idx] = Some(p);
+            }
+            for idx in remainder.iter_ones() {
+                v[idx] = bp;
+            }
+            util::wrap(v.iter()
+                .enumerate()
+                .filter_map(|(idx, p)| Some((*p.as_ref()?, idx)))
+                .min_by_key(|(p, idx)| {
+                    let p0 = self
+                        .square(*idx)
+                        .iter()
+                        .filter_map(|&cidx| Some(R64::new(1.0) - v[cidx]?))
+                        .product::<R64>();
+                    *p * (R64::new(1.0) - p0)
                 })
-                .and_then(|idx| Some((R64::new(0.0) * bp?, idx)));
-            util::wrap(ps.chain(alt.into_iter()).min())?;
+            )?;
             Ok(())
         })
     }

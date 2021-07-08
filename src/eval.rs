@@ -68,6 +68,7 @@ impl Evaluation {
     ) -> (Option<R64>, impl Iterator<Item = ScoredIndex> + '_) {
         let mut weighted_spf = self.spf.clone();
         weighted_spf.weighted(flags, n);
+        log::debug!("{:?}", weighted_spf);
         let bp =
             (n != 0).then(|| (R64::new(flags as f64) - *&weighted_spf.ev()) / R64::new(n as f64));
         let ps = self.ipf.iter().map(move |(idx, pf)| {
@@ -84,8 +85,13 @@ impl Add for Evaluation {
         let count = self.count + rhs.count;
         let p = self.count / count;
         let q = rhs.count / count;
-        let g =
-            |x: PF, y: PF| x.zip_with_longest(&y, |c: R64, d: R64| c * p + d * q, R64::new(0.0));
+        let g = |x: PF, y: PF| {
+            x.zip_with_longest(&y, |either| match either {
+                EitherOrBoth::Both(&c, &d) => c * p + d * q,
+                EitherOrBoth::Left(&c) => c * p,
+                EitherOrBoth::Right(&d) => d * q,
+            })
+        };
         let spf = g(self.spf, rhs.spf);
         let ipf = self
             .ipf
@@ -108,11 +114,17 @@ impl Mul for Evaluation {
         let lhs_ipf = self
             .ipf
             .iter()
-            .map(|(idx, pf)| (*idx, (pf * &self.spf).convolve(&rhs.spf)));
+            .map(|(idx, pf)| {
+                let npf = &((pf * &self.spf).convolve(&rhs.spf)) / &spf;
+                (*idx, npf)
+            });
         let rhs_ipf = rhs
             .ipf
             .iter()
-            .map(|(idx, pf)| (*idx, (pf * &rhs.spf).convolve(&self.spf)));
+            .map(|(idx, pf)| {
+                let npf = &((pf * &rhs.spf).convolve(&self.spf)) / &spf;
+                (*idx, npf)
+            });
         let ipf = lhs_ipf.merge(rhs_ipf).collect();
         Self { count, spf, ipf }
     }

@@ -19,10 +19,6 @@
 
 # TODO
 
-- `evaluate_small` should break group and run flood fill detect
-- `evaluate_small` more intelligent, or at least randomized
-- Replace `smallvec` with `arrayvec` for `Square`
-- Replace `smallvec` with appropriate data structure in grouping
-- Replace `evaluate_large` with `evaluate_small` and profile
-- Precompute `Square`s and store in `Solver` struct
-- Refactor solve-related algorithms to `Solver` in `solve.rs`
+- Refactor/Optimize model counting code
+- Better structures for Square?
+- Use linalg

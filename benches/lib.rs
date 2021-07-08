@@ -154,6 +154,15 @@ Expert 31.4% (283 / 901)
 test bench_random_expert       ... bench:   2,479,525 ns/iter (+/- 11,403,234)
 */
 
+/* Iteration 13
+Beginner 91.2% (51728 / 56701)
+test bench_random_beginner     ... bench:      96,392 ns/iter (+/- 26,075)
+Intermediate 76.4% (6419 / 8401)
+test bench_random_intermediate ... bench:     447,130 ns/iter (+/- 275,045)
+Expert 35.6% (747 / 2101)
+test bench_random_expert       ... bench:   2,453,535 ns/iter (+/- 3,295,075)
+*/
+
 use minesweeper::*;
 
 use rand::{
